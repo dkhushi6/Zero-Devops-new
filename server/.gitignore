@@ -7,3 +7,6 @@ _*
 engine
 bin/
 *.out
+
+// Environment variables
+.env

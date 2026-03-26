@@ -8,10 +8,10 @@
   },
   "database": {
       "host": "localhost",
-      "port": "3306",
-      "user": "user",
+      "port": "5432",
+      "user": "postgres",
       "pass": "password",
-      "name": "article"
+      "name": "authentication"
   }
 
 }
