@@ -1,6 +1,6 @@
 module github.com/bxcodec/go-clean-arch
 
-go 1.21
+go 1.25.0
 
 require (
 	github.com/bxcodec/faker v1.4.2
@@ -42,6 +42,7 @@ require (
 	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4 // indirect
 	golang.org/x/crypto v0.0.0-20180426230345-b49d69b5da94 // indirect
 	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e // indirect
 	golang.org/x/text v0.3.0 // indirect
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect

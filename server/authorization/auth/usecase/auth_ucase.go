@@ -23,8 +23,12 @@ func NewUserUsecase(u domain.UserRepository, g domain.GithubRepository, timeout 
 	}
 }
 
-func (a *authUsecase) HandleGithubCallback(ctx context.Context){
-	g,ctx = errgroup.WithContext(ctx)
-	
-	g.Go(func())
+func (a *authUsecase) Signup(ctx context.Context, provider string) error {
+	g, ctx := errgroup.WithContext(ctx)
+	switch provider {
+	case "custom":
+		
+	default:
+		return nil
+	}
 }

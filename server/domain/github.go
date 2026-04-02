@@ -9,6 +9,11 @@ type GithubInstalltion struct {
 	AccountName		string		`json:"acount_name"`	
 }
 
+type GithubUsecase interface {
+	InstallGithubApp(ctx context.Context) (*TokenResponse , error)
+	DeleteGithubApp(ctx context.Context) error
+}
+
 type GithubRepositry interface {
 	StoreInstalltion(ctx context.Context , inst *GithubInstallation) error
 	GetInstallationByUserID(ctx context.Context , userID int64) (*GithubInstallation, error)
