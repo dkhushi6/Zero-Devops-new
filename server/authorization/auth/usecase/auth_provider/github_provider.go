@@ -2,17 +2,25 @@ package AuthProvider
 
 import (
 	"context"
-	"golang.org/x/sync/errgroup"
+	"encoding/json"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth/github"
+	"golang.org/x/oauth2/github"
 	"github.com/sirupsen/logrus"
+	"domain"
 )
+
+type githubUser struct {
+	ID	int64 `json:"id"`
+	Login string `json:"login"`
+	Email string `json:"email"`
+	AvatarURL string `json:"avatar_url"`
+}
 
 type githubProvider struct{
 	config *oauth2.Config
 }
 
-// Need to add a return strcut here
+// NewGithubProvider returns a new github provider
 func NewGithubProvider(clientId , clientSecret , redirectUrl string) domain.OAuthProvider {
 	return &githubProvider{
 		config: &oauth2.Config{
@@ -25,7 +33,7 @@ func NewGithubProvider(clientId , clientSecret , redirectUrl string) domain.OAut
 	}
 }
 
-func (g *githubProvider) ExchangeCode(ctx context.Context, code string) string{
+func (g *githubProvider) ExchangeCode(ctx context.Context, code string) (string , error){
     token, err := g.config.Exchange(ctx, code)
     if err != nil {
         logrus.Error("github: code exchange failed: %v", err)
@@ -36,16 +44,28 @@ func (g *githubProvider) ExchangeCode(ctx context.Context, code string) string{
 
 func (g* githubProvider) GetUser(ctx context.Context , accessToken string) (*domain.OAuthUser, error) {
 	client := g.config.Client(ctx, &oauth2.Token{AccessToken: accessToken})
-	user, err := github.UserInfo(ctx, client)
+
+	res , err := client.Get("https://api.github.com/user")
 	if err != nil {
-		return nil, err
+		return nil,err
 	}
+	defer func(){
+		res.Body.Close()
+	}()
+
+	ghUser := githubUser{}
+
+	err = json.NewDecoder(res.Body).Decode(&ghUser)
+
+	if err != nil {
+		return nil,err
+	}
+
 	return &domain.OAuthUser{
-		Provider: "github",
-		ID:        user.ID,
-		Username:  user.Login,
-		Email:     user.Email,
-		AvatarURL: user.AvatarURL,
+		Provider:   "github",
+		ProviderId: ghUser.ID,
+		Username:   ghUser.Login,
+		Email:      ghUser.Email,
+		AvatarURL:  ghUser.AvatarURL,
 	}, nil
 }
-

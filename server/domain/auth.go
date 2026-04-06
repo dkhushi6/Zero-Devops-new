@@ -10,17 +10,17 @@ type TokenResponse struct {
 
 type OAuthUser struct {
 	Provider	string
+	ProviderId 	int64
 	Username	string
 	Email		string
-	Avatar	string
-	RawToken string
+	AvatarURL	string
 }
 
 type OAuthProvider interface {
 	ExchangeCode(ctx context.Context, code string) (string,error)
 	GetUser(ctx context.Context , accessToken string)(*OAuthUser, error)
 }
-supportedProviders := map[string]bool{
+var supportedProviders = map[string]bool{
 	"google": false,
 	"github": true,
 }

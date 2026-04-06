@@ -18,14 +18,11 @@ import (
 
 	_githubRepo "server/authorization/github/repository/pgsql"
 	_userRepo "server/authorization/user/repository/pgsql"
+	_config "server/config"
 )
 
 func init() {
-	viper.SetConfigFile(`config.json`)
-	err := viper.ReadInConfig()
-	if err != nil {
-		panic(err)
-	}
+	_config.LoadConfig()
 
 	if viper.GetBool(`debug`) {
 		log.Println("Service RUN on DEBUG mode")
@@ -63,16 +60,27 @@ func main() {
 	e.Use(middL.CORS)
 	
 	// database connection pool provides connection pipeline to the reposioties
-	authorRepo := _authorRepo.NewMysqlAuthorRepository(dbConn)
-	ar := _articleRepo.NewMysqlArticleRepository(dbConn)
+	// authorRepo := _authorRepo.NewMysqlAuthorRepository(dbConn)
+	// ar := _articleRepo.NewMysqlArticleRepository(dbConn)
 	
 	// Here are the repositories for the authorization layer
 	userRepo := _userRepo.NewPgsqlUserRepository(dbConn)
 	githubRepo := _githubRepo.NewPgsqlGithubRepository(dbConn)
+	
+	githubProvider := AuthProvider.NewGithubProvider(
+        viper.GetString("OAUTH_GITHUB_CLIENT_ID"),
+        viper.GetString("OAUTH_GITHUB_CLIENT_SECRET"),
+        viper.GetString("OAUTH_GITHUB_REDIRECT_URL"),
+    )
 
+	providers := map[string]domain.OAuthProvider	{
+		"github": githubProvider,
+	}
+
+
+	// 2. Pass it to your usecase
 	timeoutContext := time.Duration(viper.GetInt("context.timeout")) * time.Second
-	au := _articleUcase.NewArticleUsecase(ar, authorRepo, timeoutContext)
-	_articleHttpDelivery.NewArticleHandler(e, au)
+	authUsecase := _authUcase.NewAuthUsecase(userRepo, providers, timeoutContext)
 
 	log.Fatal(e.Start(viper.GetString("server.address"))) //nolint
 }

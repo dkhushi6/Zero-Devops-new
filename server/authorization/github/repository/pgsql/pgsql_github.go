@@ -75,7 +75,7 @@ func (m *pgSqlGithubRepository) DeleteInstallationByUserID(ctx context.Context ,
 		return nil , err
 	}
 	
-	rowsAffected,err = res.rowsAffected()
+	rowsAffected,err = res.RowsAffected()
 	if err!=nil{
 		return err
 	}

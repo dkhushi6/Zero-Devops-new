@@ -15,12 +15,15 @@ type User struct {
 	Username	string		`json:"username"`
 	Email 		string	`json:"email"`
 	AvatarURL 	string	`json:"avatarURL"`
-	CreatedAt 	time.Time	`json:"createdAt"`,
+	CreatedAt 	time.Time	`json:"createdAt"`
+	ProviderAccessToken string	`json:"providerAccessToken"`
+	RefreshToken string `json:"refreshToken"`
 }
 
 type UserRepository interface {
 	GetByID(ctx context.Context , id int64) (User, error)
 	GetByUsername(ctx context.Context , username string) (User , error)
+	GetProviderById(ctx context.Context , providerId int64) (User,error)
 	Store(ctx context.Context,u *User) error
-	UpdateAccessToken(ctx context.Context, id int64, token string) error
+	Update(ctx context.Context, id int64, providerToken string , refreshToken string) error
 }

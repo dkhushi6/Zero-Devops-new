@@ -3,6 +3,8 @@ package domain
 import "errors"
 
 var (
+	// ErrProviderNotSupported will throw if any of the supported providers is not found
+	ErrProviderNotSupported = errors.New("the requested oauth provider is not supported")
 	// ErrInternalServerError will throw if any the Internal Server Error happen
 	ErrInternalServerError = errors.New("internal Server Error")
 	// ErrNotFound will throw if the requested item is not exists
