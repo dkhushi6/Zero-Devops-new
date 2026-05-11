@@ -249,3 +249,54 @@ Authenticated backend user
 ## Final Recommendation
 
 Do not add custom auth yet. First make GitHub OAuth stable, then add the GitHub App installation API as a separate integration flow. Keep the structure decentralized, but make the names and interfaces strict. Loose coupling works best when the contracts are boring, consistent, and easy to test.
+
+## Update - 11 May 2026
+
+The updated direction is good, but the current code changes are not ready yet. The API plan is correct at a product level, while the implementation still needs compile fixes and a cleaner token flow before the endpoints are finished.
+
+Confirmed auth API plan for now:
+
+- Add login through OAuth only. Do not add custom signup yet because GitHub OAuth is the source of identity for the current product flow.
+- Use `POST /auth/github/login` only if the frontend sends the GitHub `code` directly to the backend. If the backend needs to start the OAuth flow, use `GET /auth/github/login` to redirect or return the GitHub authorization URL.
+- Add `GET /auth/github/callback` or `POST /auth/github/callback` for the OAuth callback. Pick one shape and keep it consistent with the frontend. This endpoint should call `HandleOAuthCallback` and return app-owned access and refresh tokens.
+- Add `GET /auth/me` as the safer default for "current user" instead of exposing an unauthenticated `GET /user/:id`. If `GET /user/:id` is needed later, protect it with middleware and only allow the same user or an admin.
+- Add `POST /auth/refresh` to accept a refresh token, validate it, rotate it, store the new refresh token, and return a new access token plus refresh token.
+- Add `POST /auth/logout` to invalidate the stored refresh token for the authenticated user. If tokens are sent in cookies, the handler should also clear the cookie.
+- Add auth middleware that validates the access token, extracts `user_id`, and stores it in Echo context for protected routes.
+
+Recommended route set:
+
+```text
+GET  /auth/github/login
+GET  /auth/github/callback
+POST /auth/refresh
+POST /auth/logout
+GET  /auth/me
+```
+
+If the frontend handles the GitHub redirect and only sends the code to the backend, replace the first two routes with:
+
+```text
+POST /auth/github/login
+```
+
+Request body:
+
+```json
+{
+  "code": "github_oauth_code"
+}
+```
+
+The current code still needs these fixes before the API is considered okay:
+
+- `auth_handler.go` is incomplete and currently imports unused packages.
+- `auth_handler.go` imports `server/domain`, but the module path is `github.com/bxcodec/go-clean-arch/domain`.
+- `auth_ucase.go` uses `viper.GetStrin`; it should be `viper.GetString`.
+- `HandleOAuthCallback` calls `GetByProviderById`, but the repository interface currently exposes `GetProviderById`.
+- `generateTokens` expects `*domain.User`, but `HandleOAuthCallback` currently passes `oauthUser`, which is `*domain.OAuthUser`.
+- New users must be stored first so the local `user.ID` exists before generating app tokens.
+- Logout extracts `user_id` as a string, but token generation stores it as a number. Keep it numeric and pass `int64` to `UserRepository.Update`.
+- Refresh token storage should ideally store a hash of the refresh token instead of the raw token.
+
+Final decision: yes, add login, current-user, logout, refresh-token, and middleware now. Do not add signup yet. Keep signup/custom auth as a later feature after GitHub OAuth and GitHub App installation are stable.

@@ -1,4 +1,5 @@
-module github.com/bxcodec/go-clean-arch
+module Zero_Devops/server
+
 
 go 1.25.0
 

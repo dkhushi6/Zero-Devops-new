@@ -3,7 +3,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/sirupsen/logrus"
-	"server/domain"
+	"Zero_Devops/server/domain"
 )
 
 type pgSqlGithubRepository struct {
@@ -16,34 +16,34 @@ func NewPgSqlGithubRepository(conn *sql.DB) domain.GithubRepository {
 
 func (m *pgSqlGithubRepository) StoreInstallation(ctx context.Context, inst *domain.GithubInstallation) error {
 	query := `INSERT INTO Github (UserID , InstallationID , AccountName) VALUES ($1 , $2 , $3)`
-	stmt,err := m.Conn.PrepareContext(ctx,query)
-	
+	stmt, err := m.Conn.PrepareContext(ctx, query)
+
 	if err != nil {
 		logrus.Error(error)
 		return err
 	}
-	
-	res,err := stmt.ExecContext(ctx , inst.UserID, inst.InstallationID, inst.AccountName)
-	
+
+	res, err := stmt.ExecContext(ctx, inst.UserID, inst.InstallationID, inst.AccountName)
+
 	if err != nil {
 		logrus.Error(err)
 		return err
 	}
-	
+
 	inst.ID = res.LastInsertId()
-	
+
 	return nil
 }
 
-func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context , userId int64) (*domain.GithubInstallation, error) {
+func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context, userId int64) (*domain.GithubInstallation, error) {
 	query := `SELECT * FROM Github WHERE UserID = $1`
-	res,err := m.Conn.QueryRowContext(ctx , query , userId)
-	
+	res, err := m.Conn.QueryRowContext(ctx, query, userId)
+
 	if err != nil {
 		logrus.Error(err)
-		return nil , err
+		return nil, err
 	}
-	
+
 	inst := domain.GithubInstallation{}
 	err = res.Scan(
 		&inst.ID,
@@ -51,39 +51,39 @@ func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context , us
 		&inst.InstallationID,
 		&inst.AccountName,
 	)
-	
+
 	if err != nil {
 		logrus.Error(err)
-		return nil , err
+		return nil, err
 	}
-	
-	return &inst , nil
+
+	return &inst, nil
 }
 
-func (m *pgSqlGithubRepository) DeleteInstallationByUserID(ctx context.Context , userId int64) (*domain.GithubInstallation, error) {
+func (m *pgSqlGithubRepository) DeleteInstallationByUserID(ctx context.Context, userId int64) (*domain.GithubInstallation, error) {
 	query := `DELETE FROM Github WHERE UserID = $1`
-	stmt,err := m.Conn.PrepareContext(ctx , query)
-	
+	stmt, err := m.Conn.PrepareContext(ctx, query)
+
 	if err != nil {
 		logrus.Error(err)
-		return nil , err
+		return nil, err
 	}
-	
-	res , err = stmt.ExecContext(ctx , userId)
+
+	res, err = stmt.ExecContext(ctx, userId)
 	if err != nil {
 		logrus.Error(err)
-		return nil , err
+		return nil, err
 	}
-	
-	rowsAffected,err = res.RowsAffected()
-	if err!=nil{
+
+	rowsAffected, err = res.RowsAffected()
+	if err != nil {
 		return err
 	}
-	
+
 	if rowsAffected != 1 {
 		err = fmt.Errorf("weird  Behavior. Total Affected: %d", rowsAfected)
 		return nil, err
 	}
-	
+
 	return nil
 }

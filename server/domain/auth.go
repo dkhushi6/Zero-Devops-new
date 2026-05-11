@@ -20,10 +20,6 @@ type OAuthProvider interface {
 	ExchangeCode(ctx context.Context, code string) (string,error)
 	GetUser(ctx context.Context , accessToken string)(*OAuthUser, error)
 }
-var supportedProviders = map[string]bool{
-	"google": false,
-	"github": true,
-}
 
 //  Oauth Methods
 type AuthUsecase interface {

@@ -1,9 +1,11 @@
+package pgsql
+
 import (
 	"context"
 	"database/sql"
 	"fmt"
 	"github.com/sirupsen/logrus"
-	"server/domain"
+	"Zero_Devops/server/domain"
 )
 
 type pqSqlUserRepository struct {
@@ -16,21 +18,11 @@ func NewPgSqlUserRepository(conn *sql.DB) domain.UserRepository {
 
 func (m *pqSqlUserRepository) GetByID (ctx context.Context , id int64) (domain.User, error) {
 	query := `SELECT * FROM users WHERE ID = $1`
-	row,err := m.Conn.QueryRowContext(ctx,query,id)
-	if err != nil {
-		logrus.Error(err)
-		return nil ,err
-	}
-	
-	defer func(){
-		errRow := row.Close()
-		if errRow != nil {
-			logrus.Error(errRow)
-		}
-	}
+	row := m.Conn.QueryRowContext(ctx,query,id)
+
 	
 	var u domain.User
-	err = row.Scan(
+	err := row.Scan(
 		&u.ID,
 		&u.ProviderId,
 		&u.Provider,
@@ -41,30 +33,22 @@ func (m *pqSqlUserRepository) GetByID (ctx context.Context , id int64) (domain.U
 		&u.RefreshToken,
 	)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.User{}, domain.ErrNotFound
+		}
 		logrus.Error(err)
-		return nil, err
+		return domain.User{}, err
 	}
+
 	return u, nil
 }
 
 func (m *pqSqlUserRepository) GetByUsername (ctx context.Context , username string) (domain.User , error){
 	query := `SELECT * FROM users WHERE Username = $1`
-	row,err := m.Conn.QueryRowContext(ctx,query,username)
+	row := m.Conn.QueryRowContext(ctx,query,username)
 	
-	if err != nil{
-		logrus.Error(err)
-		return nil,err
-	}
-	
-	defer func(){
-		errRow := row.Close()
-		if errRow != nil {
-			logrus.Error(errRow)
-		}
-	}
-	
-	u = domain.User{}
-	err = row.Scan(
+	u := domain.User{}
+	err := row.Scan(
 		&u.ID,
 		&u.ProviderId,
 		&u.Provider,
@@ -76,31 +60,23 @@ func (m *pqSqlUserRepository) GetByUsername (ctx context.Context , username stri
 	)
 	
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.User{}, domain.ErrNotFound
+		}
 		logrus.Error(err)
-		return nil , err
+		return domain.User{}, err
 	}
+
 	
 	return u,nil
 }
 
 func (m* pqSqlUserRepository) GetProviderById(ctx context.Context , providerId int64) (domain.User , error){
 	query := `SELECT * FROM users WHERE ProviderId = $1`
-	row,err := m.Conn.QueryRowContext(ctx,query,providerId)
+	row := m.Conn.QueryRowContext(ctx,query,providerId)
 
-	if err != nil {
-		logrus.Error(err)
-		return nil , err
-	}
-
-	defer func(){
-		errRow := row.Close()
-		if errRow != nil{
-			logrus.Error(errRow)
-		}
-	}
-
-	u = domain.User{}
-	err = row.Scan(
+	u := domain.User{}
+	err := row.Scan(
 		&u.ID,
 		&u.ProviderId,
 		&u.Provider,
@@ -112,8 +88,11 @@ func (m* pqSqlUserRepository) GetProviderById(ctx context.Context , providerId i
 	)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.User{}, domain.ErrNotFound
+		}
 		logrus.Error(err)
-		return nil , err
+		return domain.User{}, err
 	}
 
 	return u , nil
@@ -131,26 +110,29 @@ func (m *pqSqlUserRepository) Store(ctx context.Context , user *domain.User) (er
 	return nil
 }
 
-func (m* pgSqlUserRepository) Update(ctx context.Context , id int64 , refreshToken string) error {
-	query := `UPDATE users SET AccessToken = $1 , RefreshToken = $2 WHERE ID = $3`
+func (m* pqSqlUserRepository) Update(ctx context.Context , id int64 , refreshToken string) error {
+	query := `UPDATE users SET RefreshToken = $1 WHERE ID = $2`
 	
 	stmt,err := m.Conn.PrepareContext(ctx,query)
 
 	if err != nil {
 		logrus.Error(err)
-		return nil
+		return err
 	}
+	
+	defer stmt.Close()
 
 	res,err := stmt.ExecContext(ctx,refreshToken,id)
 	if err != nil {
 		logrus.Error(err)
-		return nil
+		return err
 	}
+
 
 	rowsAffected , err := res.RowsAffected()
 	if err != nil {
 		logrus.Error(err)
-		return nil
+		return err
 	}
 
 	if rowsAffected != 1 {
