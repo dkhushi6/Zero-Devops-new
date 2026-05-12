@@ -1,3 +1,5 @@
+package pgsql
+
 import (
 	"context"
 	"database/sql"
@@ -19,33 +21,36 @@ func (m *pgSqlGithubRepository) StoreInstallation(ctx context.Context, inst *dom
 	stmt, err := m.Conn.PrepareContext(ctx, query)
 
 	if err != nil {
-		logrus.Error(error)
+		logrus.Error(err)
 		return err
 	}
 
-	res, err := stmt.ExecContext(ctx, inst.UserID, inst.InstallationID, inst.AccountName)
+	result, err := stmt.ExecContext(ctx, inst.UserID, inst.InstallationID, inst.AccountName)
 
 	if err != nil {
 		logrus.Error(err)
 		return err
 	}
 
-	inst.ID = res.LastInsertId()
+	// This feature is not supported by all the databases sonce here I am using Postgres then I have to check for it
+	new_id,err := result.LastInsertId() // Here is a issue I need to check it
+
+	if err != nil{
+		logrus.Error(err)
+		return err
+	}
+
+	inst.ID = new_id
 
 	return nil
 }
 
 func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context, userId int64) (*domain.GithubInstallation, error) {
 	query := `SELECT * FROM Github WHERE UserID = $1`
-	res, err := m.Conn.QueryRowContext(ctx, query, userId)
-
-	if err != nil {
-		logrus.Error(err)
-		return nil, err
-	}
+	res := m.Conn.QueryRowContext(ctx, query, userId)
 
 	inst := domain.GithubInstallation{}
-	err = res.Scan(
+	err := res.Scan(
 		&inst.ID,
 		&inst.UserID,
 		&inst.InstallationID,
@@ -53,6 +58,9 @@ func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context, use
 	)
 
 	if err != nil {
+		if err == sql.ErrNoRows{
+			return nil,domain.ErrNotFound
+		}
 		logrus.Error(err)
 		return nil, err
 	}
@@ -60,29 +68,29 @@ func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context, use
 	return &inst, nil
 }
 
-func (m *pgSqlGithubRepository) DeleteInstallationByUserID(ctx context.Context, userId int64) (*domain.GithubInstallation, error) {
+func (m *pgSqlGithubRepository) DeleteInstallationByUserID(ctx context.Context, userId int64) error {
 	query := `DELETE FROM Github WHERE UserID = $1`
 	stmt, err := m.Conn.PrepareContext(ctx, query)
 
 	if err != nil {
 		logrus.Error(err)
-		return nil, err
+		return err
 	}
 
-	res, err = stmt.ExecContext(ctx, userId)
+	res, err := stmt.ExecContext(ctx, userId)
 	if err != nil {
 		logrus.Error(err)
-		return nil, err
+		return err
 	}
 
-	rowsAffected, err = res.RowsAffected()
+	rowsAffected, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
 
 	if rowsAffected != 1 {
-		err = fmt.Errorf("weird  Behavior. Total Affected: %d", rowsAfected)
-		return nil, err
+		err = fmt.Errorf("weird  Behavior. Total Affected: %d", rowsAffected)
+		return err
 	}
 
 	return nil

@@ -37,7 +37,7 @@ func NewGithubProvider(clientId, clientSecret, redirectUrl string) domain.OAuthP
 func (g *githubProvider) ExchangeCode(ctx context.Context, code string) (string, error) {
 	token, err := g.config.Exchange(ctx, code)
 	if err != nil {
-		logrus.Error("github: code exchange failed: %v", err)
+		logrus.Errorf("github: code exchange failed: %v", err)
 		return "", err
 	}
 	return token.AccessToken, nil

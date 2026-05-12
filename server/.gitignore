@@ -10,3 +10,5 @@ bin/
 
 // Environment variables
 .env
+
+.gocache

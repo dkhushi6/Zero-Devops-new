@@ -10,17 +10,18 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 
-	_articleHttpDelivery "github.com/bxcodec/go-clean-arch/article/delivery/http"
-	_articleHttpDeliveryMiddleware "github.com/bxcodec/go-clean-arch/article/delivery/http/middleware"
-	_articleRepo "github.com/bxcodec/go-clean-arch/article/repository/mysql"
-	_articleUcase "github.com/bxcodec/go-clean-arch/article/usecase"
-	_authorRepo "github.com/bxcodec/go-clean-arch/author/repository/mysql"
+	// _articleHttpDelivery "github.com/bxcodec/go-clean-arch/article/delivery/http"
+	// _articleHttpDeliveryMiddleware "github.com/bxcodec/go-clean-arch/article/delivery/http/middleware"
+	// _articleRepo "github.com/bxcodec/go-clean-arch/article/repository/mysql"
+	// _articleUcase "github.com/bxcodec/go-clean-arch/article/usecase"
+	// _authorRepo "github.com/bxcodec/go-clean-arch/author/repository/mysql"
 
-
-	_authUcase "server/authorization/auth/usecase"
-	_githubRepo "server/authorization/github/repository/pgsql"
-	_userRepo "server/authorization/user/repository/pgsql"
-	_config "server/config"
+	domain "Zero_Devops/server/domain"
+	_authUcase "Zero_Devops/server/authorization/auth/usecase"
+	_githubRepo "Zero_Devops/server/authorization/github/repository/pgsql"
+	_userRepo "Zero_Devops/server/authorization/user/repository/pgsql"
+	_config "Zero_Devops/server/config"
+	_authProvider "Zero_Devops/server/authorization/auth/usecase/auth_provider"
 )
 
 func init() {
@@ -58,18 +59,18 @@ func main() {
 
 	e := echo.New()
 	// middleware
-	middL := _articleHttpDeliveryMiddleware.InitMiddleware()
-	e.Use(middL.CORS)
+	// middL := _articleHttpDeliveryMiddleware.InitMiddleware()
+	// e.Use(middL.CORS)
 	
 	// database connection pool provides connection pipeline to the reposioties
 	// authorRepo := _authorRepo.NewMysqlAuthorRepository(dbConn)
 	// ar := _articleRepo.NewMysqlArticleRepository(dbConn)
 	
 	// Here are the repositories for the authorization layer
-	userRepo := _userRepo.NewPgsqlUserRepository(dbConn)
-	githubRepo := _githubRepo.NewPgsqlGithubRepository(dbConn)
+	userRepo := _userRepo.NewPgSqlUserRepository(dbConn)
+	githubRepo := _githubRepo.NewPgSqlGithubRepository(dbConn)
 	
-	githubProvider := AuthProvider.NewGithubProvider(
+	githubProvider := _authProvider.NewGithubProvider(
         viper.GetString("OAUTH_GITHUB_CLIENT_ID"),
         viper.GetString("OAUTH_GITHUB_CLIENT_SECRET"),
         viper.GetString("OAUTH_GITHUB_REDIRECT_URL"),

@@ -300,3 +300,69 @@ The current code still needs these fixes before the API is considered okay:
 - Refresh token storage should ideally store a hash of the refresh token instead of the raw token.
 
 Final decision: yes, add login, current-user, logout, refresh-token, and middleware now. Do not add signup yet. Keep signup/custom auth as a later feature after GitHub OAuth and GitHub App installation are stable.
+
+## Update - 13 May 2026
+
+The authorization work has progressed, but the backend is still not ready to start building the final APIs yet. The API design is clear; the implementation needs a compile-clean base first.
+
+Progress completed since the previous note:
+
+- `domain/auth.go` now defines the OAuth provider contract, token response, and auth usecase contract.
+- `domain/user.go` now has a user model and user repository contract with provider lookup, create, and refresh-token update methods.
+- `domain/github.go` now uses the corrected `GithubInstallation`, `GithubRepository`, and `GithubUsecase` names.
+- `authorization/user/repository/pgsql/pgsql_user.go` now has a valid `pgsql` package, Postgres user repository methods, `RETURNING ID` for insert, and `sql.ErrNoRows` mapping to `domain.ErrNotFound`.
+- `authorization/auth/usecase/auth_ucase.go` now has JWT access-token and refresh-token generation, OAuth callback handling, refresh-token rotation, and logout refresh-token clearing.
+- `authorization/auth/delivery/http/auth_handler.go` has route placeholders for login, refresh, logout, and current-user.
+
+Current verification:
+
+```text
+go test ./...
+```
+
+Result: failing. The server still has compile errors, so the APIs should not be considered ready yet.
+
+Main blockers found now:
+
+- Import paths are inconsistent. Some files import `Zero_Devops/server/...`, some import `server/...`, and older article packages still import `github.com/bxcodec/go-clean-arch/...`.
+- `app/main.go` still does not compile because it references missing or wrongly imported auth provider/domain symbols and has unused article imports.
+- `auth_handler.go` only registers routes; handler methods still return `nil`.
+- `auth_handler.go` imports `Zero_Devops/server/domain`; keep this consistent with the module path in `go.mod`.
+- `HandleOAuthCallback` does not correctly handle `domain.ErrNotFound`; it checks `existingUser.ID == 0` while ignoring the lookup error.
+- New users get tokens after `Store`, which is good, but the new refresh token is not saved for the first login.
+- Refresh tokens are still stored raw. This can work for early development, but hashing them is safer before production.
+- `authorization/github/repository/pgsql/pgsql_github.go` still does not satisfy `domain.GithubRepository` and has multiple SQL/result-handling compile errors.
+- `authorization/github/usercase/github_ucase.go` has an unused import and still needs real install/delete/get behavior.
+
+Readiness decision:
+
+Not ready to make the final APIs yet. The next step should be a compile-fix pass, then API handler implementation.
+
+Recommended immediate order:
+
+1. Fix module/import paths across the server.
+2. Make `app/main.go` compile and wire auth provider, user repo, and auth usecase correctly.
+3. Fix `pgsql_github.go` so it satisfies `domain.GithubRepository`.
+4. Fix `HandleOAuthCallback` error handling and persist refresh tokens for new users.
+5. Implement the auth HTTP handler methods.
+6. Add access-token middleware for protected routes.
+7. Only then add GitHub App installation APIs.
+
+API decision remains the same:
+
+```text
+GET  /auth/github/login
+GET  /auth/github/callback
+POST /auth/refresh
+POST /auth/logout
+GET  /auth/me
+```
+
+If the frontend sends the OAuth code directly to the backend, use this instead:
+
+```text
+POST /auth/github/login
+POST /auth/refresh
+POST /auth/logout
+GET  /auth/me
+```

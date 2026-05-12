@@ -78,7 +78,6 @@ func (a *authUsecase) HandleOAuthCallback(ctx context.Context, code string, prov
 			Email:      oauthUser.Email,
 			AvatarURL:  oauthUser.AvatarURL,
 			CreatedAt:  time.Now(),
-			// RefreshToken: appRefreshToken,
 		}
 		err := a.userRepo.Store(ctx, &userToSave)
 		if err != nil {
@@ -106,8 +105,6 @@ func (a *authUsecase) HandleOAuthCallback(ctx context.Context, code string, prov
 			RefreshToken: appRefreshToken,
 		}, nil
 	}
-
-	return nil, domain.ErrInternalServerError
 }
 
 func (a *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*domain.TokenResponse, error) {
