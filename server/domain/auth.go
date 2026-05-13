@@ -1,6 +1,8 @@
 package domain
 
-import "context"
+import (
+	"context"
+)
 
 // Session Management Tokens
 type TokenResponse struct {
@@ -16,6 +18,14 @@ type OAuthUser struct {
 	AvatarURL	string
 }
 
+type UserResponse struct {
+	ID        int64  `json:"id"`
+	Provider  string `json:"provider"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	AvatarURL string `json:"avatarURL"`
+}
+
 type OAuthProvider interface {
 	ExchangeCode(ctx context.Context, code string) (string,error)
 	GetUser(ctx context.Context , accessToken string)(*OAuthUser, error)
@@ -29,7 +39,7 @@ type AuthUsecase interface {
 	// FUTURE : CUSTOM AUTH
 	// RegisterCustom(ctx context.Context , username string , email string , password string) error
 	// LoginCustom(ctx context.Context, email string , password string) (*TokenResponse, error)
-	
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
+	GetCurrentUser(ctx context.Context,accessToken string) (UserResponse,error)
 	Logout(ctx context.Context, accessToken string) error
 }

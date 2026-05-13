@@ -193,5 +193,45 @@ func (a *authUsecase) Logout(ctx context.Context, accessToken string) error {
 	}
 
 	return nil
+}
 
+func (a* authUsecase) GetCurrentUser(ctx context.Context,accessToken string) (domain.UserResponse,error){
+	secretKey := (viper.GetString("JWT_SECRET"))
+	if secretKey == "" {
+		return domain.UserResponse{},domain.ErrMissingSecret
+	}
+
+	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (any, error) {
+		hmacSecret := []byte(secretKey)
+
+		return hmacSecret, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	if err != nil || token == nil || !token.Valid {
+		return domain.UserResponse{},domain.ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return domain.UserResponse{},domain.ErrInvalidToken
+	}
+
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return domain.UserResponse{},domain.ErrInvalidToken
+	}
+	userId := int64(userIDFloat)
+
+	user,err := a.userRepo.GetByID(ctx,userId)
+
+	if err != nil{
+		return domain.UserResponse{} , err
+	}
+
+	return domain.UserResponse{
+		ID:user.ID,
+		Provider: user.Provider,
+		Username : user.Username,
+		Email : user.Email,
+		AvatarURL: user.AvatarURL,
+	},nil
 }

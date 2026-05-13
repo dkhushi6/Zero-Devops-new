@@ -366,3 +366,48 @@ POST /auth/refresh
 POST /auth/logout
 GET  /auth/me
 ```
+
+## Update - 13 May 2026 - Auth Handler Progress
+
+The auth HTTP handler has moved from placeholders to real endpoint logic for the current cookie-based OAuth flow.
+
+Progress completed since the previous update:
+
+- `authorization/auth/delivery/http/auth_handler.go` now implements `POST /auth/github/login`.
+- `Login` validates the required GitHub OAuth `code`, calls `HandleOAuthCallback(ctx, code, "github")`, writes `access_token` and `refresh_token` cookies, and returns a success response.
+- `authorization/auth/delivery/http/auth_handler.go` now implements `POST /auth/refresh`.
+- `Refresh` reads the `refresh_token` cookie, calls `AuthUsecase.RefreshToken`, rotates both cookies, and returns a success response.
+- `authorization/auth/delivery/http/auth_handler.go` now implements `POST /auth/logout`.
+- `Logout` reads the `access_token` cookie, calls `AuthUsecase.Logout`, then clears both auth cookies.
+- `authorization/auth/delivery/http/auth_handler.go` now implements `GET /auth/user/me`.
+- `domain/auth.go` now defines `UserResponse`, which avoids returning the stored `RefreshToken` from `domain.User`.
+- `AuthUsecase` now exposes `GetCurrentUser(ctx, accessToken)`.
+- `authorization/auth/usecase/auth_ucase.go` now validates the access token for current-user lookup, extracts `user_id`, loads the user through `UserRepository.GetByID`, and returns a safe `UserResponse`.
+
+Current verification:
+
+```text
+go test ./...
+```
+
+Result: failing only in `Zero_Devops/server/app` at the moment.
+
+Current compile blockers:
+
+- `app/main.go` creates `githubRepo` but does not use it yet.
+- `app/main.go` creates `authUsecase` but does not pass it to the auth HTTP handler yet.
+
+Important remaining auth issues:
+
+- `NewAuthHandler(e, authUsecase)` still needs to be called from `app/main.go`; otherwise the auth routes are implemented but not registered.
+- `githubRepo` should either be wired into the GitHub installation flow or temporarily removed until that API is implemented.
+- `HandleOAuthCallback` still needs better `domain.ErrNotFound` handling. It currently ignores the repository error and checks `existingUser.ID == 0`.
+- New-user login still generates a refresh token but does not persist it with `userRepo.Update`, so the first refresh after a new signup can fail.
+- `getStatusCode` should map `domain.ErrInvalidToken` to `401 Unauthorized`, `domain.ErrProviderNotSupported` and `domain.ErrBadParamInput` to `400 Bad Request`, and `domain.ErrMissingSecret` to `500 Internal Server Error`.
+- `Logout` and `GetCurrentUser` now duplicate access-token validation logic. This can be extracted into a private helper such as `getUserIDFromAccessToken`.
+- Route naming is currently `GET /auth/user/me`; the cleaner final shape is still likely `GET /auth/me`.
+- Cookies are now `HttpOnly`, `SameSite=Lax`, path-scoped to `/`, and production-controlled for `Secure`. Before production, confirm the `IS_PRODUCTION_ENV` value is true behind HTTPS.
+
+Readiness decision:
+
+The auth API implementation is much closer now. Login, refresh, logout, and current-user routes have real handler logic, and the auth packages compile. The next immediate step is wiring the handler in `app/main.go`, then fixing `HandleOAuthCallback` refresh-token persistence for new users.
