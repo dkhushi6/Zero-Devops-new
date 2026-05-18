@@ -625,3 +625,65 @@ Recommended next implementation order:
 Readiness decision:
 
 The auth API is still close, but the repository is not compile-clean with the repo-local Go cache because the GitHub installation usecase stub has unused imports. The fastest path is a small compile cleanup first, then the GitHub installation usecase and handler can be added on top of the existing repository.
+
+## Update - 17 May 2026
+
+Today was mostly a documentation and review pass around the current auth implementation and project state.
+
+Progress completed today:
+
+- The root `README.md` was updated from a one-line placeholder into a project-specific README.
+- The new root README now documents the current server and client workspaces, backend layout, client layout, implemented auth/GitHub progress, local development commands, environment variables, backend API routes, and known next work.
+- The stale `server/README.md` was identified as old upstream clean-architecture template text that should be replaced later.
+- The auth token generation flow in `authorization/auth/usecase/auth_ucase.go` was reviewed against `domain.TokenResponse`.
+- Confirmed there is no direct type/signature mismatch between `generateTokens` and `TokenResponse`: `generateTokens` returns access token, refresh token, and error; `TokenResponse` expects `AccessToken` and `RefreshToken`.
+- Confirmed the real issue is behavioral: for a newly created OAuth user, the generated refresh token is returned to the client but is not persisted to the user row.
+- Confirmed that existing-user login and refresh-token rotation do persist the refresh token with `userRepo.Update`.
+- Confirmed `HandleOAuthCallback` still needs explicit `domain.ErrNotFound` handling instead of ignoring the `GetProviderById` error and checking `existingUser.ID == 0`.
+
+Current verification:
+
+```text
+go test ./...
+```
+
+Result: failing only in `Zero_Devops/server/authorization/github/usercase`.
+
+Current compile blockers:
+
+- `authorization/github/usercase/github_ucase.go` imports `net/http` but does not use it.
+- `authorization/github/usercase/github_ucase.go` imports `time` but does not use it.
+- `authorization/github/usercase/github_ucase.go` imports `Zero_Devops/server/domain` but does not use it.
+
+Important auth issue confirmed today:
+
+- New OAuth users can log in and receive cookies, but their first refresh can fail because the refresh token in the cookie does not match any stored refresh token in the database.
+
+Recommended immediate fix:
+
+After storing a new user and generating tokens, persist the generated refresh token:
+
+```go
+appAccessToken, appRefreshToken, err := generateTokens(&userToSave)
+if err != nil {
+    return nil, err
+}
+
+err = a.userRepo.Update(ctx, userToSave.ID, appRefreshToken)
+if err != nil {
+    return nil, err
+}
+```
+
+Recommended next implementation order:
+
+1. Remove the unused imports from `authorization/github/usercase/github_ucase.go` so the server compiles cleanly again.
+2. Fix `HandleOAuthCallback` to branch on `domain.ErrNotFound` and return unexpected repository errors.
+3. Persist the refresh token for newly created OAuth users.
+4. Improve auth error-to-status-code mapping in `auth_handler.go`.
+5. Replace the stale `server/README.md` with backend-specific documentation.
+6. Continue the GitHub installation usecase and handler wiring.
+
+Readiness decision:
+
+The auth route implementation is still close, and the token response types are aligned. The next important auth fix is not a type change; it is persisting the new user's refresh token and tightening repository error handling.

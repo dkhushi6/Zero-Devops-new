@@ -12,3 +12,5 @@ bin/
 .env
 
 .gocache
+*.pem
+keys

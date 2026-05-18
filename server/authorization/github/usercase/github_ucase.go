@@ -7,9 +7,12 @@ import (
 	"Zero_Devops/server/domain"
 )
 
-type githubAppUsecase struct{}
+type githubAppUsecase struct{
+	// Here gitRepo does not identify github repositories it means the github functions 
+	githubRepo domain.GithubRepository
+}
 
-func NewGiithubAppUsecase() *githubAppUsecase {
+func NewGithubAppUsecase() *githubAppUsecase {
 	return &githubAppUsecase{}
 }
 
@@ -18,7 +21,7 @@ func (g *githubAppUsecase) InstallGithubApp(ctx context.Context) error {
 	return nil
 }
 
-func (g *githubAppUsecase) GetGithubAppInstallation(ctx context.Context) error {
+func (g *githubAppUsecase) GetGithubAppInstallation(ctx context.Context,user_id int64) error {
 	return nil
 }
 
