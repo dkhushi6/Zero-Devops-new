@@ -37,7 +37,7 @@ The likely flow is:
 1. User connects GitHub to the platform.
 2. User installs the GitHub App.
 3. Backend stores the installation reference.
-4. Dashboard loads repository choices for the installed app.
+4. Dashboard loads repository choices for the installedN app.
 5. User selects a repository.
 6. Backend stores the chosen repository.
 7. User deploys the selected repository.

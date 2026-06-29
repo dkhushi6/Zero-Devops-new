@@ -22,6 +22,8 @@ type GithubInstallation struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
+
+
 type PushEvent struct {
     Ref        string `json:"ref"`
     Before     string `json:"before"`
@@ -40,6 +42,8 @@ type Commit struct {
         Email string `json:"email"`
     } `json:"author"`
 }
+
+
 type PullRequestEvent struct {
     Action      string `json:"action"`
     Number      int    `json:"number"`
@@ -60,6 +64,8 @@ type PullRequestEvent struct {
         FullName string `json:"full_name"`
     } `json:"repository"`
 }
+
+
 type GithubUsecase interface {
 	InstallGithubApp(ctx context.Context, client *http.Client, code string, user_id int64) error
 	DeleteGithubApp(ctx context.Context, userID int64) error

@@ -4,25 +4,41 @@ import "errors"
 
 var (
 	// ErrProviderNotSupported will throw if any of the supported providers is not found
-	ErrProviderNotSupported = errors.New("the requested oauth provider is not supported")
+	ErrProviderNotSupported 		 = errors.New("the requested oauth provider is not supported")
 	// ErrInternalServerError will throw if any the Internal Server Error happen
-	ErrInternalServerError = errors.New("internal Server Error")
+	ErrInternalServerError 			 = errors.New("internal Server Error")
 	// ErrNotFound will throw if the requested item is not exists
-	ErrNotFound = errors.New("your requested Item is not found")
+	ErrNotFound 					 = errors.New("your requested Item is not found")
 	// ErrConflict will throw if the current action already exists
-	ErrConflict = errors.New("your Item already exist")
+	ErrConflict 					 = errors.New("your Item already exist")
 	// ErrBadParamInput will throw if the given request-body or params is not valid
-	ErrBadParamInput = errors.New("given Param is not valid")
+	ErrBadParamInput 				 = errors.New("given Param is not valid")
 	
-	ErrInvalidToken = errors.New("invalid or expired token")
+	ErrInvalidToken 				 = errors.New("invalid or expired token")
 
-	ErrMissingSecret = errors.New("Secret Not Found")
+	ErrMissingSecret 				 = errors.New("Secret Not Found")
 
-	ErrLoggingOut = errors.New("Error In Logging Out")
+	ErrLoggingOut 					 = errors.New("Error In Logging Out")
 
-	ErrInvalidCode = errors.New("Invalid Code")
+	ErrInvalidCode 					 = errors.New("Invalid Code")
 
-	ErrInvalidStatus = errors.New("Invalid Status")
+	ErrInvalidStatus 				 = errors.New("Invalid Status")
 
 	ErrGithubInstallationFetchFailed = errors.New("Github Installation Failed.Error Installing Github App")
+
+	// Github Webhook Errors
+
+	ErrEventNotSpecifiedToParse  	 = errors.New("no Event specified to parse")
+
+	ErrInvalidHTTPMethod         	 = errors.New("invalid HTTP Method")
+
+	ErrMissingGithubEventHeader  	 = errors.New("missing X-GitHub-Event Header")
+
+	ErrMissingHubSignatureHeader 	 = errors.New("missing X-Hub-Signature-256 Header")
+
+	ErrEventNotFound            	 = errors.New("event not defined to be parsed")
+
+	ErrParsingPayload           	 = errors.New("error parsing payload")
+
+	ErrHMACVerificationFailed   	 = errors.New("HMAC verification failed")
 )
