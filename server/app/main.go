@@ -16,6 +16,9 @@ import (
 	_githubUsecase "Zero_Devops/server/integrations/scm/github/usecase"
 	_userRepo "Zero_Devops/server/authorization/user/repository/pgsql"
 	_appHttp "Zero_Devops/server/integrations/scm/delivery/http"
+	_deploymentHttp "Zero_Devops/server/deployments/delivery/http"
+	_deploymentRepo "Zero_Devops/server/deployments/repository/pgsql"
+	_deploymentUsecase "Zero_Devops/server/deployments/usecase"
 	_config "Zero_Devops/server/config"
 	domain "Zero_Devops/server/domain"
 )
@@ -88,6 +91,11 @@ func main() {
 	githubUsecase := _githubUsecase.NewGithubAppUsecase(githubRepo)
 	// ** NEED TO ADD THE APP INTEGRATION HTTP FOR IT TO BE ADDED
 	_appHttp.NewSCMHandler(e,githubUsecase)
+
+	// 4. Initialize the Deployments feature
+	deploymentRepo := _deploymentRepo.NewPgSqlDeploymentRepository(dbConn)
+	deploymentUsecase := _deploymentUsecase.NewDeploymentUsecase(deploymentRepo, githubRepo)
+	_deploymentHttp.NewDeploymentHandler(e, deploymentUsecase)
 
 	log.Fatal(e.Start(viper.GetString("SERVER_ADDRESS"))) //nolint
 }
