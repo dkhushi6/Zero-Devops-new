@@ -53,6 +53,8 @@ func (r *queueUsecase) SetUpQueues() error{
 		return err
 	}	
 
+
+	// DEAD LETTER QUEUE
 	_,err = r.queueClient.Channel.QueueDeclare(
 		"deploy.jobs.dlq",
 		true,

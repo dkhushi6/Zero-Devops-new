@@ -75,6 +75,23 @@ func updateStatus(ctx context.Context, db *sql.DB, job domain.DeployJob, status 
 	return err
 }
 
+func insertDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob) error {
+	imageTag := fmt.Sprintf("deploy-%s:latest", job.DeploymentID)
+	query := `
+		INSERT INTO deployments (id, clone_url, status, retry_count, image_tag)
+		VALUES ($1, $2, 'queued', $3, $4)
+	`
+
+	stmt, err := db.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, job.DeploymentID, job.Clone_URL, job.RetryCount, imageTag)
+	return err
+}
+
 func updateOutputURL(ctx context.Context, db *sql.DB, job domain.DeployJob, outputURL string) error {
 	query := `UPDATE deployments SET output_url = $1 WHERE id = $2`
 
@@ -177,6 +194,10 @@ func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath str
 }
 
 func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase) error {
+	if err := insertDeployment(ctx, db, job); err != nil {
+		return err
+	}
+
 	if err := updateStatus(ctx, db, job, "building"); err != nil {
 		return err
 	}
