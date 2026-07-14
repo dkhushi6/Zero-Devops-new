@@ -3,7 +3,7 @@ package queue
 import (
 	"encoding/json"
 	"log"
-
+	"Zero_Devops/worker_server/domain"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -13,45 +13,32 @@ func failOnError(err error , msg string){
 	}
 }
 
-type RabbitMQ struct {
-	conn    *amqp.Connection
-	channel *amqp.Channel
+type queueUsecase struct {
+	queueClient	*domain.RabbitMQ
 }
 
-type DeployJob struct {
-	DeploymentID string  `json:"id"`
-	Clone_URL 	 string	 `json:"clone_url"`
-	RetryCount	 int     `json:"retry_count"`
-}
-
-func NewRabbitMQ(url string) (*RabbitMQ,error){
-	conn,err := amqp.Dial(url)
-	if err != nil{
-		failOnError(err,"Faild to connect to RabbitMQ")
-		return nil,err
+func NewQueueUsecase(conn *amqp.Connection , channel *amqp.Channel) domain.QueueUsecase{
+	return &queueUsecase{
+		queueClient: &domain.RabbitMQ{
+			Conn: conn,
+			Channel: channel,
+		},
 	}
-
-	ch,err := conn.Channel()
-	if err != nil{
-		failOnError(err,"Failed to open a channel")
-		return nil,err
-	}
-
-	return &RabbitMQ{conn:conn,channel:ch},nil
 }
 
-func (r *RabbitMQ) Close(){
-	r.conn.Close()
-	r.channel.Close()
+func (r *queueUsecase) Close(){
+	queueClient := r.queueClient
+	queueClient.Conn.Close()
+	queueClient.Channel.Close()
 }
 
-func (r *RabbitMQ) Channel() *amqp.Channel {
-	return r.channel
+func (r *queueUsecase) Channel() *amqp.Channel {
+	return r.queueClient.Channel
 }
 
-func (r *RabbitMQ) SetUpQueues() error{
+func (r *queueUsecase) SetUpQueues() error{
 
-		err := r.channel.ExchangeDeclare(		
+		err := r.queueClient.Channel.ExchangeDeclare(		
 			"deploy.dlx",
 			"direct",
 			true,
@@ -66,7 +53,7 @@ func (r *RabbitMQ) SetUpQueues() error{
 		return err
 	}	
 
-	_,err = r.channel.QueueDeclare(
+	_,err = r.queueClient.Channel.QueueDeclare(
 		"deploy.jobs.dlq",
 		true,
 		false,
@@ -80,7 +67,7 @@ func (r *RabbitMQ) SetUpQueues() error{
 		return err
 	}	
 
-	err = r.channel.QueueBind("deploy.jobs.dlq", "deploy.jobs.dlq", "deploy.dlx", false, nil)
+	err = r.queueClient.Channel.QueueBind("deploy.jobs.dlq", "deploy.jobs.dlq", "deploy.dlx", false, nil)
 
 	if err != nil{
 		failOnError(err,"Failed to Bind")
@@ -92,7 +79,7 @@ func (r *RabbitMQ) SetUpQueues() error{
 		"x-dead-letter-routing-key": "deploy.jobs.dlq",
 	}
 
-	_,err = r.channel.QueueDeclare(
+	_,err = r.queueClient.Channel.QueueDeclare(
 		"deploy.jobs",
 		true,
 		false,
@@ -110,7 +97,7 @@ func (r *RabbitMQ) SetUpQueues() error{
 
 }
 
-func (r* RabbitMQ) PublishJob(job DeployJob) error{
+func (r* queueUsecase) PublishJob(job domain.DeployJob) error{
 	body, err := json.Marshal(job)
 
 	if err != nil{
@@ -118,7 +105,7 @@ func (r* RabbitMQ) PublishJob(job DeployJob) error{
 		return err
 	}
 
-	return r.channel.Publish(
+	return r.queueClient.Channel.Publish(
 		"",
 		"deploy.jobs",
 		false,

@@ -15,8 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"build_app_test/upload"
-	"build_app_test/worker/queue"
+	"Zero_Devops/worker_server/domain"
 
 	"github.com/moby/go-archive"
 	"github.com/moby/moby/client"
@@ -63,7 +62,7 @@ func cloneRepo(cloneURL string, deploymentID string) (string, error) {
 	return destPath, nil
 }
 
-func updateStatus(ctx context.Context, db *sql.DB, job queue.DeployJob, status string) error {
+func updateStatus(ctx context.Context, db *sql.DB, job domain.DeployJob, status string) error {
 	query := `UPDATE deployments SET status = $1 WHERE id = $2`
 
 	stmt, err := db.PrepareContext(ctx, query)
@@ -76,7 +75,7 @@ func updateStatus(ctx context.Context, db *sql.DB, job queue.DeployJob, status s
 	return err
 }
 
-func updateOutputURL(ctx context.Context, db *sql.DB, job queue.DeployJob, outputURL string) error {
+func updateOutputURL(ctx context.Context, db *sql.DB, job domain.DeployJob, outputURL string) error {
 	query := `UPDATE deployments SET output_url = $1 WHERE id = $2`
 
 	stmt, err := db.PrepareContext(ctx, query)
@@ -177,7 +176,7 @@ func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath str
 	return nil
 }
 
-func ProcessDeployment(ctx context.Context, db *sql.DB, job queue.DeployJob, artifactUploader upload.Uploader) error {
+func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase) error {
 	if err := updateStatus(ctx, db, job, "building"); err != nil {
 		return err
 	}

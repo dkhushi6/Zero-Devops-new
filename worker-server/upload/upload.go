@@ -7,23 +7,28 @@ import (
 	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"Zero_Devops/worker_server/domain"
 )
 
-type Client struct {
-	s3Client   *s3.Client
-	bucketName string
-	publicBaseURL string
+type clientUsecase struct {
+	uploadClient *domain.UploadClient
 }
 
-type Uploader interface {
-	UploadImage(filePath string) (string, error)
+func NewUploadUsecase(client *s3.Client, bucketName string, publicBaseURL string) domain.UploadUsecase {
+
+	return &clientUsecase{
+		uploadClient: &domain.UploadClient {
+			S3Client: client, 
+			BucketName: bucketName, 
+			PublicBaseURL: publicBaseURL,
+		},
+	}
 }
 
-func NewUpload(client *s3.Client, bucketName string, publicBaseURL string) Uploader {
-	return &Client{s3Client: client, bucketName: bucketName, publicBaseURL: publicBaseURL}
-}
+func (c *clientUsecase) UploadImage(filePath string) (string, error) {
 
-func (c *Client) UploadImage(filePath string) (string, error) {
+	s3Client := c.uploadClient;
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file %q: %w", filePath, err)
@@ -33,8 +38,8 @@ func (c *Client) UploadImage(filePath string) (string, error) {
 	filename := filepath.Base(filePath)
 	key := "images/" + filename
 
-	_, err = c.s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket: &c.bucketName,
+	_, err = s3Client.S3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket: &s3Client.BucketName,
 		Key:    &key,
 		Body:   file,
 	})
@@ -42,9 +47,9 @@ func (c *Client) UploadImage(filePath string) (string, error) {
 		return "", err
 	}
 
-	if c.publicBaseURL == "" {
-		return fmt.Sprintf("s3://%s/%s", c.bucketName, key), nil
+	if s3Client.PublicBaseURL == "" {
+		return fmt.Sprintf("s3://%s/%s", s3Client.BucketName, key), nil
 	}
 
-	return fmt.Sprintf("%s/%s", c.publicBaseURL, key), nil
+	return fmt.Sprintf("%s/%s", s3Client.PublicBaseURL, key), nil
 }

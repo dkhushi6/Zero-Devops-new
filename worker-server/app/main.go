@@ -1,21 +1,22 @@
 package main
 
 import (
-	"build_app_test/config"
-	"build_app_test/worker/queue"
-	"build_app_test/worker/worker"
 	"context"
 	"database/sql"
 	"fmt"
 	"log"
 
-	"build_app_test/upload"
+	"Zero_Devops/worker_server/config"
+	"Zero_Devops/worker_server/queue"
+	"Zero_Devops/worker_server/upload"
+	"Zero_Devops/worker_server/worker"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	aws_config "github.com/aws/aws-sdk-go-v2/config"
 	aws_credentials "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	_ "github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/spf13/viper"
 )
 
@@ -40,17 +41,8 @@ func main() {
 		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountId))
 	})
 
-	artifactUploader := upload.NewUpload(client, bucketName, publicBaseURL)
-
-	rmq, err := queue.NewRabbitMQ(viper.GetString("RABBITMQ_CONNECTION_STRING"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rmq.Close()
-
-	if err := rmq.SetUpQueues(); err != nil {
-		log.Fatal(err)
-	}
+	// ArtifactUploader Usecase
+	artifactUploader := upload.NewUploadUsecase(client, bucketName, publicBaseURL)
 
 	dbHost := viper.GetString("DATABASE_HOST")
 	dbPort := viper.GetString("DATABASE_PORT")
@@ -74,7 +66,28 @@ func main() {
 		}
 	}()
 
-	if err := worker.StartWorker(rmq, db, artifactUploader); err != nil {
+	rmqConn, err := amqp.Dial(viper.GetString("RABBITMQ_CONNECTION_STRING"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rmqConn.Close()
+
+	rmqCh, err := rmqConn.Channel()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rmqCh.Close()
+
+	// Queue Usecase
+	queueClient := queue.NewQueueUsecase(rmqConn, rmqCh)
+
+	if err := queueClient.SetUpQueues(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Worker Usecase
+	workerUsecase := worker.NewWorkerUsecase(queueClient, db, artifactUploader)
+	if err := workerUsecase.StartWorker(); err != nil {
 		log.Fatalf("worker stopped: %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-module build_app_test
+module Zero_Devops/worker_server
 
 go 1.25.0
 
