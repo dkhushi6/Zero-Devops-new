@@ -54,7 +54,7 @@ func (r *queueUsecase) SetUpQueues() error{
 	}	
 
 
-	// DEAD LETTER QUEUE
+	// DEAD LETTER QUEUE FOR JOBS
 	_,err = r.queueClient.Channel.QueueDeclare(
 		"deploy.jobs.dlq",
 		true,
@@ -76,10 +76,12 @@ func (r *queueUsecase) SetUpQueues() error{
 		return err
 	}	
 
-	args := amqp.Table{
+	args_jobs := amqp.Table{
 		"x-dead-letter-exchange":    "deploy.dlx",
 		"x-dead-letter-routing-key": "deploy.jobs.dlq",
 	}
+
+	// JOBS QUEUE
 
 	_,err = r.queueClient.Channel.QueueDeclare(
 		"deploy.jobs",
@@ -87,11 +89,53 @@ func (r *queueUsecase) SetUpQueues() error{
 		false,
 		false,
 		false,
-		args,
+		args_jobs,
 	)
 
 	if err != nil{
-		failOnError(err,"Failed to declare a queue")
+		failOnError(err,"Failed to declare job queue")
+		return err
+	}
+
+	// DEAD LETTER QUEUE FOR STATUS
+	_,err = r.queueClient.Channel.QueueDeclare(
+		"deploy.status.dlq",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+
+	if err != nil{
+		failOnError(err,"Failed to  Create DLQ")
+		return err
+	}	
+
+	err = r.queueClient.Channel.QueueBind("deploy.status.dlq", "deploy.status.dlq", "deploy.dlx", false, nil)
+
+	if err != nil{
+		failOnError(err,"Failed to Bind")
+		return err
+	}	
+
+	args_status := amqp.Table{
+		"x-dead-letter-exchange":    "deploy.dlx",
+		"x-dead-letter-routing-key": "deploy.status.dlq",
+	}
+
+	// STATUS QUEUE
+	_,err = r.queueClient.Channel.QueueDeclare(
+		"deploy.status",
+		true,
+		false,
+		false,
+		false,
+		args_status,
+	)
+
+	if err != nil{
+		failOnError(err,"Failed to declare status queue")
 		return err
 	}
 
@@ -119,4 +163,26 @@ func (r* queueUsecase) PublishJob(job domain.DeployJob) error{
 		},
 	)
 }
+
+func (r* queueUsecase) PublishStatusUpdate(status domain.DeployStatusMessage) error{
+	body, err := json.Marshal(status)
+
+	if err != nil{
+		failOnError(err,"Failed to Publish Status")
+		return err
+	}
+
+	return r.queueClient.Channel.Publish(
+		"",
+		"deploy.status",
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body: body,
+		},
+	)
+}
+
 

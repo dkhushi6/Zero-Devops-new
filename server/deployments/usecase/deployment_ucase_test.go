@@ -7,9 +7,10 @@ import (
 )
 
 type deploymentRepoMock struct {
-	storeFn   func(ctx context.Context, d *domain.Deployment) error
-	getUserFn func(ctx context.Context, userID int64) ([]domain.Deployment, error)
-	getIDFn   func(ctx context.Context, userID, id int64) (*domain.Deployment, error)
+	storeFn        func(ctx context.Context, d *domain.Deployment) error
+	getUserFn      func(ctx context.Context, userID int64) ([]domain.Deployment, error)
+	getIDFn        func(ctx context.Context, userID, id int64) (*domain.Deployment, error)
+	updateStatusFn func(ctx context.Context, deploymentID int64, status domain.DeploymentStatus) error
 }
 
 func (m *deploymentRepoMock) Store(ctx context.Context, d *domain.Deployment) error {
@@ -31,6 +32,13 @@ func (m *deploymentRepoMock) GetByID(ctx context.Context, userID, id int64) (*do
 		return m.getIDFn(ctx, userID, id)
 	}
 	return nil, nil
+}
+
+func (m *deploymentRepoMock) UpdateStatus(ctx context.Context, deploymentID int64, status domain.DeploymentStatus) error {
+	if m.updateStatusFn != nil {
+		return m.updateStatusFn(ctx, deploymentID, status)
+	}
+	return nil
 }
 
 type githubRepoMock struct {

@@ -62,6 +62,13 @@ func cloneRepo(cloneURL string, deploymentID string) (string, error) {
 	return destPath, nil
 }
 
+func publishStatusUpdate(queueUsecase domain.QueueUsecase, deploymentID string, status string) error {
+	return queueUsecase.PublishStatusUpdate(domain.DeployStatusMessage{
+		DeploymentID: deploymentID,
+		Status:       status,
+	})
+}
+
 func updateStatus(ctx context.Context, db *sql.DB, job domain.DeployJob, status string) error {
 	query := `UPDATE deployments SET status = $1 WHERE id = $2`
 
@@ -193,7 +200,7 @@ func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath str
 	return nil
 }
 
-func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase) error {
+func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase, queueUsecase domain.QueueUsecase) error {
 	if err := insertDeployment(ctx, db, job); err != nil {
 		return err
 	}
@@ -202,16 +209,27 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 		return err
 	}
 
+	if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "building"); err != nil {
+		return err
+	}
+
 	repoPath, err := cloneRepo(job.Clone_URL, job.DeploymentID)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
+	
 	defer os.RemoveAll(repoPath)
 
 	builder, err := detectFramework(repoPath)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
 	pm := detectPackageManager(repoPath)
@@ -219,6 +237,9 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	if builder.Name != "docker" {
 		if err := writeDockerfile(repoPath, builder, pm); err != nil {
 			_ = updateStatus(ctx, db, job, "failed")
+			if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+				return err
+			}
 			return err
 		}
 	}
@@ -226,6 +247,9 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
 
@@ -235,12 +259,18 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 
 	if err := buildImage(buildCtx, cli, repoPath, imageTag); err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
 
 	tarPath := filepath.Join(repoPath, fmt.Sprintf("%s.tar", job.DeploymentID))
 	if err := saveImageTar(buildCtx, cli, imageTag, tarPath); err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
 	defer os.Remove(tarPath)
@@ -248,13 +278,23 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	outputURL, err := artifactUploader.UploadImage(tarPath)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
 
 	if err := updateOutputURL(ctx, db, job, outputURL); err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
+		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
+			return err
+		}
 		return err
 	}
 
-	return updateStatus(ctx, db, job, "done")
+	if err := updateStatus(ctx, db, job, "done"); err != nil {
+		return err
+	}
+
+	return publishStatusUpdate(queueUsecase, job.DeploymentID, "done")
 }

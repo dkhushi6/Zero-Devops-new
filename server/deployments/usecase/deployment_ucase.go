@@ -10,15 +10,17 @@ import (
 	"strconv"
 	"time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/golang-jwt/jwt/v5"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 type deployJob struct {
-	DeploymentID string `json:"id"`
-	CloneURL     string `json:"clone_url"`
-	RetryCount   int    `json:"retry_count"`
+	DeploymentID  string `json:"deployment_id"`
+	CloneURL      string `json:"clone_url"`
+	CallbackQueue string `json:"callback_queue"`
+	RetryCount    int    `json:"retry_count"`
 }
 
 type deploymentUsecase struct {
@@ -27,12 +29,27 @@ type deploymentUsecase struct {
 	rmq            *amqp.Channel
 }
 
+type deploymentStatusUpdate struct {
+	DeploymentID string `json:"deployment_id"`
+	Status       string `json:"status"`
+}
+
 func NewDeploymentUsecase(deploymentRepo domain.DeploymentRepository, githubRepo domain.GithubRepository, rmq *amqp.Channel) domain.DeploymentUsecase {
-	return &deploymentUsecase{
+	uc := &deploymentUsecase{
 		deploymentRepo: deploymentRepo,
 		githubRepo:     githubRepo,
 		rmq:            rmq,
 	}
+
+	if rmq != nil {
+		go func() {
+			if err := uc.consumeStatusUpdate(); err != nil {
+				logrus.Errorf("deployment status consumer stopped: %v", err)
+			}
+		}()
+	}
+
+	return uc
 }
 
 type installationTokenResponse struct {
@@ -46,9 +63,10 @@ type githubRepoResponse struct {
 
 func (d *deploymentUsecase) publishJob(deploymentID int64, cloneURL string) error {
 	job := deployJob{
-		DeploymentID: strconv.FormatInt(deploymentID, 10),
-		CloneURL:     cloneURL,
-		RetryCount:   0,
+		DeploymentID:  strconv.FormatInt(deploymentID, 10),
+		CloneURL:      cloneURL,
+		CallbackQueue: "deploy.status",
+		RetryCount:    0,
 	}
 	body, err := json.Marshal(job)
 	if err != nil {
@@ -66,6 +84,75 @@ func (d *deploymentUsecase) publishJob(deploymentID int64, cloneURL string) erro
 			Body:         body,
 		},
 	)
+}
+
+func (d *deploymentUsecase) consumeStatusUpdate() error {
+	// Consume deployment status updates from the queue
+
+	msgs, err := d.rmq.Consume(
+		"deploy.status",
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to consume deployment status queue: %w", err)
+	}
+
+	for msg := range msgs {
+		var update deploymentStatusUpdate
+		if err := json.Unmarshal(msg.Body, &update); err != nil {
+			logrus.Errorf("failed to decode deployment status update: %v", err)
+			_ = msg.Nack(false, false)
+			continue
+		}
+
+		deploymentID, err := strconv.ParseInt(update.DeploymentID, 10, 64)
+		if err != nil {
+			logrus.Errorf("invalid deployment id %q in status update: %v", update.DeploymentID, err)
+			_ = msg.Nack(false, false)
+			continue
+		}
+
+		status, ok := normalizeDeploymentStatus(update.Status)
+		if !ok {
+			logrus.Errorf("invalid deployment status update %q for deployment %d", update.Status, deploymentID)
+			_ = msg.Nack(false, false)
+			continue
+		}
+
+		if err := d.deploymentRepo.UpdateStatus(context.Background(), deploymentID, status); err != nil {
+			logrus.Errorf("failed to update deployment %d status to %q: %v", deploymentID, status, err)
+			_ = msg.Nack(false, true)
+			continue
+		}
+
+		if err := msg.Ack(false); err != nil {
+			logrus.Errorf("failed to ack deployment status update for deployment %d: %v", deploymentID, err)
+		}
+	}
+
+	return nil
+}
+
+func normalizeDeploymentStatus(status string) (domain.DeploymentStatus, bool) {
+	switch status {
+	case "queued", string(domain.DeploymentStatusPending):
+		return domain.DeploymentStatusPending, true
+	case "building", string(domain.DeploymentStatusRunning):
+		return domain.DeploymentStatusRunning, true
+	case "done", string(domain.DeploymentStatusSuccess):
+		return domain.DeploymentStatusSuccess, true
+	case string(domain.DeploymentStatusFailed):
+		return domain.DeploymentStatusFailed, true
+	case string(domain.DeploymentStatusCanceled):
+		return domain.DeploymentStatusCanceled, true
+	default:
+		return "", false
+	}
 }
 
 func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error) {

@@ -23,6 +23,7 @@ import (
 	_deploymentUsecase "Zero_Devops/server/deployments/usecase"
 	_config "Zero_Devops/server/config"
 	domain "Zero_Devops/server/domain"
+	_queue "Zero_Devops/server/queue"
 )
 
 func init() {
@@ -105,6 +106,11 @@ func main() {
 		log.Fatal(err)
 	}
 	defer rmqCh.Close()
+
+	err = _queue.SetUpQueues(rmqCh)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// 5. Initialize the Deployments feature
 	deploymentRepo := _deploymentRepo.NewPgSqlDeploymentRepository(dbConn)

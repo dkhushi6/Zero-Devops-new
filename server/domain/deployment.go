@@ -35,4 +35,5 @@ type DeploymentRepository interface {
 	Store(ctx context.Context, d *Deployment) error
 	GetByUserID(ctx context.Context, userID int64) ([]Deployment, error)
 	GetByID(ctx context.Context, userID, id int64) (*Deployment, error)
+	UpdateStatus(ctx context.Context, deploymentID int64, status DeploymentStatus) error
 }

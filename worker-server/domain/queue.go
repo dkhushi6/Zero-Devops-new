@@ -8,9 +8,14 @@ type RabbitMQ struct {
 }
 
 type DeployJob struct {
-	DeploymentID string  `json:"id"`
+	DeploymentID string  `json:"deployment_id"`
 	Clone_URL 	 string	 `json:"clone_url"`
 	RetryCount	 int     `json:"retry_count"`
+}
+
+type DeployStatusMessage struct {
+	DeploymentID string `json:"deployment_id"`
+	Status       string `json:"status"`
 }
 
 type QueueUsecase interface {
@@ -18,4 +23,5 @@ type QueueUsecase interface {
 	Channel() *amqp.Channel
 	SetUpQueues() error
 	PublishJob(job DeployJob) error
+	PublishStatusUpdate(status DeployStatusMessage) error
 }

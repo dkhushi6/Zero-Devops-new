@@ -56,7 +56,7 @@ func (w *workerUsecase) StartWorker() error {
 			continue
 		}
 
-		err := deployments.ProcessDeployment(context.Background(), w.db, job, w.artifactUploader)
+		err := deployments.ProcessDeployment(context.Background(), w.db, job, w.artifactUploader, w.queueClient)
 
 		if err != nil {
 			job.RetryCount++

@@ -86,3 +86,18 @@ func (m *pgSqlDeploymentRepository) GetByID(ctx context.Context, userID, id int6
 
 	return &d, nil
 }
+
+func (m *pgSqlDeploymentRepository) UpdateStatus(ctx context.Context, deploymentID int64, status domain.DeploymentStatus) error {
+	query := `
+		UPDATE deployments
+		SET status = $1
+		WHERE id = $2
+	`
+	_, err := m.Conn.ExecContext(ctx, query, status, deploymentID)
+	if err != nil {
+		logrus.Error(err)
+		return err
+	}
+
+	return nil
+}

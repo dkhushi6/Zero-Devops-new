@@ -28,6 +28,10 @@ func (f *fakeQueueUsecase) PublishJob(job domain.DeployJob) error {
 	return nil
 }
 
+func (f *fakeQueueUsecase) PublishStatusUpdate(status domain.DeployStatusMessage) error {
+	return nil
+}
+
 type fakeUploadUsecase struct {
 	url string
 }
