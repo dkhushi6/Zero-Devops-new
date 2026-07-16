@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -72,7 +72,7 @@ func publishStatusUpdate(queueUsecase domain.QueueUsecase, deploymentID int64, s
 }
 
 func updateStatus(ctx context.Context, db *sql.DB, job domain.DeployJob, status string) error {
-	query := `UPDATE deployments SET status = $1 WHERE id = $2`
+	query := `UPDATE deployments SET status = $1 , retry_count = $2 WHERE id = $3`
 
 	stmt, err := db.PrepareContext(ctx, query)
 	if err != nil {
@@ -80,7 +80,7 @@ func updateStatus(ctx context.Context, db *sql.DB, job domain.DeployJob, status 
 	}
 	defer stmt.Close()
 
-	_, err = stmt.ExecContext(ctx, status, job.DeploymentID)
+	_, err = stmt.ExecContext(ctx, status, job.RetryCount, job.DeploymentID)
 	return err
 }
 
@@ -103,7 +103,7 @@ func insertDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob) err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.ExecContext(ctx, job.DeploymentID, job.Clone_URL, job.RetryCount, imageTag)
+	_, err = stmt.ExecContext(ctx, job.DeploymentID, job.CloneURL, job.RetryCount, imageTag)
 	return err
 }
 
@@ -208,12 +208,15 @@ func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath str
 	return nil
 }
 
-func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase, queueUsecase domain.QueueUsecase) error {
+func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase, queueUsecase domain.QueueUsecase , retryCount int) error {
 	deploymentID := strconv.FormatInt(job.DeploymentID, 10)
 
 	log.Printf("Deployment %d: inserting worker deployment row", job.DeploymentID)
-	if err := insertDeployment(ctx, db, job); err != nil {
-		return err
+
+	if retryCount == 0 {
+		if err := insertDeployment(ctx, db, job); err != nil {
+			return err
+		}
 	}
 
 	log.Printf("Deployment %d: marking as building", job.DeploymentID)
@@ -227,7 +230,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	}
 
 	log.Printf("Deployment %d: cloning repository", job.DeploymentID)
-	repoPath, err := cloneRepo(job.Clone_URL, deploymentID)
+	repoPath, err := cloneRepo(job.CloneURL, deploymentID)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
 		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {

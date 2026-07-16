@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"os"
 )
 
 type deployJob struct {
@@ -26,7 +27,9 @@ type deployJob struct {
 type deploymentUsecase struct {
 	deploymentRepo domain.DeploymentRepository
 	githubRepo     domain.GithubRepository
-	rmq            *amqp.Channel
+	rmqConn        *amqp.Connection
+	publishCh      *amqp.Channel
+	pubMutex       sync.Mutex
 }
 
 type deploymentStatusUpdate struct {
@@ -34,14 +37,20 @@ type deploymentStatusUpdate struct {
 	Status       string `json:"status"`
 }
 
-func NewDeploymentUsecase(deploymentRepo domain.DeploymentRepository, githubRepo domain.GithubRepository, rmq *amqp.Channel) domain.DeploymentUsecase {
+func NewDeploymentUsecase(deploymentRepo domain.DeploymentRepository, githubRepo domain.GithubRepository, rmqConn *amqp.Connection) domain.DeploymentUsecase {
+	publishCh, err := rmqConn.Channel()
+	if err != nil {
+		logrus.Fatalf("failed to open publish channel: %v", err)
+	}
+
 	uc := &deploymentUsecase{
 		deploymentRepo: deploymentRepo,
 		githubRepo:     githubRepo,
-		rmq:            rmq,
+		rmqConn:        rmqConn,
+		publishCh:      publishCh,
 	}
 
-	if rmq != nil {
+	if rmqConn != nil {
 		go func() {
 			if err := uc.consumeStatusUpdate(); err != nil {
 				logrus.Errorf("deployment status consumer stopped: %v", err)
@@ -73,7 +82,10 @@ func (d *deploymentUsecase) publishJob(deploymentID int64, cloneURL string) erro
 		return fmt.Errorf("failed to marshal deploy job: %w", err)
 	}
 
-	return d.rmq.Publish(
+	d.pubMutex.Lock()
+	defer d.pubMutex.Unlock()
+
+	return d.publishCh.Publish(
 		"",
 		"deploy.jobs",
 		false,
@@ -87,9 +99,14 @@ func (d *deploymentUsecase) publishJob(deploymentID int64, cloneURL string) erro
 }
 
 func (d *deploymentUsecase) consumeStatusUpdate() error {
-	// Consume deployment status updates from the queue
+	// Open a dedicated channel for the consumer goroutine
+	consumerCh, err := d.rmqConn.Channel()
+	if err != nil {
+		return fmt.Errorf("failed to open consumer channel: %w", err)
+	}
+	defer consumerCh.Close()
 
-	msgs, err := d.rmq.Consume(
+	msgs, err := consumerCh.Consume(
 		"deploy.status",
 		"",
 		false,

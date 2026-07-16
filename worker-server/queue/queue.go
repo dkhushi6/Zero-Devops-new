@@ -2,7 +2,7 @@ package queue
 
 import (
 	"encoding/json"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"Zero_Devops/worker_server/domain"
 	amqp "github.com/rabbitmq/amqp091-go"
 )

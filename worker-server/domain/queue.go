@@ -9,7 +9,7 @@ type RabbitMQ struct {
 
 type DeployJob struct {
 	DeploymentID int64  `json:"deployment_id"`
-	Clone_URL    string `json:"clone_url"`
+	CloneURL    string `json:"clone_url"`
 	RetryCount   int    `json:"retry_count"`
 }
 

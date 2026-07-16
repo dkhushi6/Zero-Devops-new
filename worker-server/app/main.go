@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 
 	"Zero_Devops/worker_server/config"
 	"Zero_Devops/worker_server/queue"

@@ -114,7 +114,7 @@ func main() {
 
 	// 5. Initialize the Deployments feature
 	deploymentRepo := _deploymentRepo.NewPgSqlDeploymentRepository(dbConn)
-	deploymentUsecase := _deploymentUsecase.NewDeploymentUsecase(deploymentRepo, githubRepo, rmqCh)
+	deploymentUsecase := _deploymentUsecase.NewDeploymentUsecase(deploymentRepo, githubRepo, rmqConn)
 	_deploymentHttp.NewDeploymentHandler(e, deploymentUsecase)
 
 	log.Fatal(e.Start(viper.GetString("SERVER_ADDRESS"))) //nolint

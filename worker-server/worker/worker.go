@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log"
+	log "github.com/sirupsen/logrus"
 
 	"Zero_Devops/worker_server/deployments"
 	"Zero_Devops/worker_server/domain"
+
+	"github.com/spf13/viper"
 )
 
 type workerUsecase struct {
@@ -61,12 +63,18 @@ func (w *workerUsecase) StartWorker() error {
 			continue
 		}
 
-		err := deployments.ProcessDeployment(context.Background(), w.db, job, w.artifactUploader, w.queueClient)
+		err := deployments.ProcessDeployment(context.Background(), w.db, job, w.artifactUploader, w.queueClient,job.RetryCount)
+
+		MAX_RETRIES_COUNT := viper.GetInt("MAX_RETRIES_COUNT")
+
+		if MAX_RETRIES_COUNT == 0 {
+			MAX_RETRIES_COUNT = 3
+		}
 
 		if err != nil {
 			log.Printf("Deployment job %d failed: %v", job.DeploymentID, err)
 			job.RetryCount++
-			if job.RetryCount >= 3 {
+			if job.RetryCount >= MAX_RETRIES_COUNT {
 				msg.Nack(false, false)
 			} else {
 				if err := w.queueClient.PublishJob(job); err != nil {

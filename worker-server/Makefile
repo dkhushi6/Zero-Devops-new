@@ -54,7 +54,7 @@ dev-env: ## Bootstrap Environment (with Docker-Compose help).
 	fi
 
 dev-run: build ## Build and run the worker binary directly.
-	@ ./worker-engine
+	@ ./tmp/worker-engine
 
 dev-air: $(AIR) ## Starts AIR (Continuous Development app).
 	air
@@ -78,12 +78,12 @@ lint: $(GOLANGCI) ## Runs golangci-lint with predefined configuration
 #             https://golang.org/doc/articles/race_detector.html
 build: ## Builds worker-engine binary
 	@ printf "Building worker-engine... "
-	@ go build -trimpath -o worker-engine ./app/
+	@ go build -trimpath -o ./tmp/worker-engine ./app/
 	@ echo "done"
 
 build-race: ## Builds worker-engine binary (with -race flag)
 	@ printf "Building worker-engine with race flag... "
-	@ go build -trimpath -race -o worker-engine ./app/
+	@ go build -trimpath -race -o ./tmp/worker-engine ./app/
 	@ echo "done"
 
 go-generate: $(MOCKERY) ## Runs go generate ./...
@@ -152,6 +152,7 @@ clean-artifacts: ## Removes Artifacts (*.out)
 	@printf "Cleaning artifacts... "
 	@rm -f *.out
 	@rm -f worker-engine
+	@rm -f ./tmp/worker-engine ./tmp/worker-engine.exe
 	@echo "done."
 
 clean-docker: ## Removes dangling docker images
