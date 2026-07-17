@@ -19,13 +19,15 @@ import (
 	_appHttp "Zero_Devops/server/integrations/scm/delivery/http"
 	_githubRepo "Zero_Devops/server/integrations/scm/github/repository/pgsql"
 	_githubUsecase "Zero_Devops/server/integrations/scm/github/usecase"
+	"Zero_Devops/server/logger"
 	middleware "Zero_Devops/server/middleware"
 	_queue "Zero_Devops/server/queue"
 
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v5"
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -37,6 +39,11 @@ func init() {
 }
 
 func main() {
+
+	baseLogger := logger.New(viper.GetString("APP_ENV"))
+	zap.ReplaceGlobals(baseLogger)  
+	defer baseLogger.Sync()
+
 	dbHost := viper.GetString("DATABASE_HOST")
 	dbPort := viper.GetString("DATABASE_PORT")
 	dbUser := viper.GetString("DATABASE_USER")
@@ -68,10 +75,9 @@ func main() {
 
 	// request_id middleware
 	e.Use(middleware.RequestIDMiddleware)
-	
-	// database connection pool provides connection pipeline to the reposioties
-	// authorRepo := _authorRepo.NewMysqlAuthorRepository(dbConn)
-	// ar := _articleRepo.NewMysqlArticleRepository(dbConn)
+
+	// logger middleware
+	e.Use(middleware.RequestLoggerMiddleware(baseLogger))
 
 	// Here are the repositories for the authorization layer
 	userRepo := _userRepo.NewPgSqlUserRepository(dbConn)
@@ -98,7 +104,7 @@ func main() {
 	// 3. Now Intitalize the Github App Installtion for it to integrate
 	githubUsecase := _githubUsecase.NewGithubAppUsecase(githubRepo)
 	// ** NEED TO ADD THE APP INTEGRATION HTTP FOR IT TO BE ADDED
-	_appHttp.NewSCMHandler(e,githubUsecase)
+	_appHttp.NewSCMHandler(e, githubUsecase)
 
 	// 4. Setup RabbitMQ connection
 	rmqConn, err := amqp.Dial(viper.GetString("RABBITMQ_CONNECTION_STRING"))

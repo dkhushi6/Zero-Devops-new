@@ -3,6 +3,7 @@ package http
 import (
 	"Zero_Devops/server/authorization/auth/delivery/http/middleware"
 	"Zero_Devops/server/domain"
+	"Zero_Devops/server/helper"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v5"
 )
 
 type mockGithubUsecase struct {
@@ -40,14 +41,14 @@ func (m *mockGithubUsecase) DeleteGithubApp(ctx context.Context, userID int64) e
 	return nil
 }
 
-func newSCMTestContext(method, target string) (*httptest.ResponseRecorder, echo.Context) {
+func newSCMTestContext(method, target string) (*httptest.ResponseRecorder, *echo.Context) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, target, nil)
 	e := echo.New()
 	return rec, e.NewContext(req, rec)
 }
 
-func setUserID(c echo.Context, userID int64) {
+func setUserID(c *echo.Context, userID int64) {
 	c.Set(middleware.UserIDContextKey, userID)
 }
 
@@ -129,11 +130,11 @@ func TestGetInstallation_MissingUserID(t *testing.T) {
 
 func TestGetInstallation_Success(t *testing.T) {
 	expected := &domain.GithubInstallation{
-		ID:              1,
-		UserID:          99,
-		InstallationID:  12345,
-		Account_Type:    "User",
-		Account_Login:   "octocat",
+		ID:             1,
+		UserID:         99,
+		InstallationID: 12345,
+		Account_Type:   "User",
+		Account_Login:  "octocat",
 	}
 
 	handler := &SCMHandler{
@@ -158,12 +159,18 @@ func TestGetInstallation_Success(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	var got domain.GithubInstallation
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+	var resp struct {
+		Success bool                      `json:"success"`
+		Data    domain.GithubInstallation `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if got.InstallationID != expected.InstallationID {
-		t.Fatalf("expected installation_id %d, got %d", expected.InstallationID, got.InstallationID)
+	if !resp.Success {
+		t.Fatal("expected success to be true")
+	}
+	if resp.Data.InstallationID != expected.InstallationID {
+		t.Fatalf("expected installation_id %d, got %d", expected.InstallationID, resp.Data.InstallationID)
 	}
 }
 
@@ -211,7 +218,7 @@ func TestGetStatusCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getStatusCode(tt.err); got != tt.expect {
+			if got := helper.GetStatusCode(tt.err); got != tt.expect {
 				t.Fatalf("expected %d, got %d", tt.expect, got)
 			}
 		})

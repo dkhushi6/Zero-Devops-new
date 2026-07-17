@@ -10,7 +10,10 @@ import (
 	"strings"
 	"time"
 
+	appmiddleware "Zero_Devops/server/middleware"
+
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 type githubAppUsecase struct{
@@ -45,14 +48,9 @@ type GithubInstallationList struct{
 }
 
 func (g *githubAppUsecase) InstallGithubApp(ctx context.Context,client *http.Client ,code string,user_id int64) error {
-	/*
-		Here I need the installation id here but for that
-		I would first get the code from the string and here it is been used a parameter
-		Then I will get the accessToken using that I will use the https://github.com/login/oauth/access_token
-		Then there will be the user token used to call
-		GET https://api.github.com/user/installations
-		It would return the list of the installations of the user and from there I would check the installtion_id and return it
-	*/
+	log := appmiddleware.LoggerFromContext(ctx)
+	log.Info("Starting GitHub App installation", zap.Int64("user_id", user_id))
+
 	GITHUB_APP_CLIENT_ID := viper.GetString("GITHUB_APP_CLIENT_ID")
 	GITHUB_APP_CLIENT_SECRET := viper.GetString("GITHUB_APP_CLIENT_SECRET")
 	GITHUB_APP_ID := viper.GetInt64("GITHUB_APP_ID")
@@ -73,6 +71,7 @@ func (g *githubAppUsecase) InstallGithubApp(ctx context.Context,client *http.Cli
 
 	response,err := client.Do(req)
 	if err != nil{
+		log.Error("Failed to perform access token request", zap.Error(err))
 		return err
 	}
 
@@ -101,6 +100,7 @@ func (g *githubAppUsecase) InstallGithubApp(ctx context.Context,client *http.Cli
 
 	response_installation , err := client.Do(req_installation)
 	if err != nil {
+		log.Error("Failed to perform installations fetch request", zap.Error(err))
 		return err
 	}
 

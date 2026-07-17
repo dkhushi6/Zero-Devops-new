@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/sirupsen/logrus"
+	appmiddleware "Zero_Devops/server/middleware"
+
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 )
@@ -37,7 +39,8 @@ func NewGithubProvider(clientId, clientSecret, redirectUrl string) domain.OAuthP
 func (g *githubProvider) ExchangeCode(ctx context.Context, code string) (string, error) {
 	token, err := g.config.Exchange(ctx, code)
 	if err != nil {
-		logrus.Errorf("github: code exchange failed: %v", err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("github: code exchange failed", zap.Error(err))
 		return "", err
 	}
 	return token.AccessToken, nil

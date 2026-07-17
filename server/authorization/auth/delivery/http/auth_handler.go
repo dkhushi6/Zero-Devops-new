@@ -2,22 +2,17 @@ package http
 
 import (
 	"Zero_Devops/server/domain"
-	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
+	"Zero_Devops/server/helper"
+	"Zero_Devops/server/middleware"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/labstack/echo/v5"
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
-
-type ResponseError struct {
-	Message string `json:"message"`
-}
-
-type UserResponseMessage struct {
-	Message string              `json:"message"`
-	Data    domain.UserResponse `json:"data"`
-}
 
 type AuthHandler struct {
 	AUsecase domain.AuthUsecase
@@ -42,7 +37,7 @@ func writeCookie(token string, cookie_name string, expiry_time time.Duration) *h
 	return cookie
 }
 
-func readCookie(c echo.Context, cookie_name string) (string, error) {
+func readCookie(c *echo.Context, cookie_name string) (string, error) {
 	cookie, err := c.Cookie(cookie_name)
 
 	if err != nil {
@@ -62,17 +57,22 @@ func NewAuthHandler(e *echo.Echo, us domain.AuthUsecase) {
 	e.GET("/auth/user/me", handler.GetUser)
 }
 
-func (a *AuthHandler) Login(c echo.Context) error {
+func (a *AuthHandler) Login(c *echo.Context) error {
+	reqID := middleware.GetRequestID(c)
+	log := middleware.LoggerFromContext(c.Request().Context())
+
 	code := c.QueryParam("code")
 	if code == "" {
-		return c.JSON(http.StatusBadRequest, ResponseError{Message: "Code is Required"})
+		log.Warn("Missing OAuth code parameter")
+		return c.JSON(http.StatusBadRequest, helper.BuildErrorResponse("Code is Required", fmt.Errorf("missing code query parameter"), reqID))
 	}
 
 	ctx := c.Request().Context()
 	tokens, err := a.AUsecase.HandleOAuthCallback(ctx, code, "github")
 
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Error("OAuth callback failed", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
 	accessExpiry, err := strconv.Atoi(viper.GetString("ACCESS_TOKEN_EXPIRY"))
@@ -91,23 +91,27 @@ func (a *AuthHandler) Login(c echo.Context) error {
 	c.SetCookie(access_token_cookie)
 	c.SetCookie(refresh_token_cookie)
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "User Logged in Successfully",
-	})
+	log.Info("User logged in successfully")
+	return c.JSON(http.StatusOK, helper.BuildSuccessResponse(nil, "", reqID, helper.WithMessage("User Logged in Successfully")))
 }
 
-func (a *AuthHandler) Refresh(c echo.Context) error {
+func (a *AuthHandler) Refresh(c *echo.Context) error {
+	reqID := middleware.GetRequestID(c)
+	log := middleware.LoggerFromContext(c.Request().Context())
+
 	refreshToken, err := readCookie(c, "refresh_token")
 
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Warn("Failed to read refresh token cookie", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
 	ctx := c.Request().Context()
 	tokens, err := a.AUsecase.RefreshToken(ctx, refreshToken)
 
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Error("Failed to refresh token", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
 	accessExpiry, err := strconv.Atoi(viper.GetString("ACCESS_TOKEN_EXPIRY"))
@@ -126,21 +130,25 @@ func (a *AuthHandler) Refresh(c echo.Context) error {
 	c.SetCookie(access_token_cookie)
 	c.SetCookie(refresh_token_cookie)
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "User Token Refreshed Successfully",
-	})
+	log.Info("User token refreshed successfully")
+	return c.JSON(http.StatusOK, helper.BuildSuccessResponse(nil, "", reqID, helper.WithMessage("User Token Refreshed Successfully")))
 }
 
-func (a *AuthHandler) Logout(c echo.Context) error {
+func (a *AuthHandler) Logout(c *echo.Context) error {
+	reqID := middleware.GetRequestID(c)
+	log := middleware.LoggerFromContext(c.Request().Context())
+
 	ctx := c.Request().Context()
 	accessToken, err := readCookie(c, "access_token")
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Warn("Failed to read access token cookie on logout", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
 	err = a.AUsecase.Logout(ctx, accessToken)
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Error("Failed to logout user", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
 	access_token_cookie := writeCookie("", "access_token", time.Duration(0)*time.Hour)
@@ -150,40 +158,28 @@ func (a *AuthHandler) Logout(c echo.Context) error {
 	c.SetCookie(access_token_cookie)
 	c.SetCookie(refresh_token_cookie)
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "User Logged Out Successfully"})
+	log.Info("User logged out successfully")
+	return c.JSON(http.StatusOK, helper.BuildSuccessResponse(nil, "", reqID, helper.WithMessage("User Logged Out Successfully")))
 }
 
-func (a *AuthHandler) GetUser(c echo.Context) error {
+func (a *AuthHandler) GetUser(c *echo.Context) error {
+	reqID := middleware.GetRequestID(c)
+	log := middleware.LoggerFromContext(c.Request().Context())
+
 	accessToken, err := readCookie(c, "access_token")
 
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Warn("Failed to read access token cookie on get user", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 	ctx := c.Request().Context()
 
 	userResponse, err := a.AUsecase.GetCurrentUser(ctx, accessToken)
 
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Error("Failed to get current user", zap.Error(err))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
-	return c.JSON(http.StatusOK, UserResponseMessage{Message: "user details fetched successfully", Data: userResponse})
-}
-
-func getStatusCode(err error) int {
-	if err == nil {
-		return http.StatusOK
-	}
-
-	logrus.Error(err)
-	switch err {
-	case domain.ErrInternalServerError:
-		return http.StatusInternalServerError
-	case domain.ErrNotFound:
-		return http.StatusNotFound
-	case domain.ErrConflict:
-		return http.StatusConflict
-	default:
-		return http.StatusInternalServerError
-	}
+	return c.JSON(http.StatusOK, helper.BuildSuccessResponse(userResponse, "", reqID, helper.WithMessage("user details fetched successfully")))
 }

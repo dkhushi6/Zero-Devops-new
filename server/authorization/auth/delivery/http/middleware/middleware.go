@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"Zero_Devops/server/domain"
+	appmiddleware "Zero_Devops/server/middleware"
 	"errors"
 	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v5"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 const (
@@ -24,7 +26,7 @@ func NewAuthMiddlewareHandler(userRepo domain.UserRepository) *AuthMiddlewareHan
 	}
 }
 
-func (a *AuthMiddlewareHandler) Validator(c echo.Context, accessToken string) (int64, error) {
+func (a *AuthMiddlewareHandler) Validator(c *echo.Context, accessToken string) (int64, error) {
 	secretKey := viper.GetString("JWT_SECRET")
 	if secretKey == "" {
 		return 0, domain.ErrMissingSecret
@@ -56,31 +58,40 @@ func (a *AuthMiddlewareHandler) Validator(c echo.Context, accessToken string) (i
 	return userID, nil
 }
 
-func (a *AuthMiddlewareHandler) Skipper(c echo.Context) bool {
+func (a *AuthMiddlewareHandler) Skipper(c *echo.Context) bool {
 	path := c.Path()
 	return path == "/auth/github/login" || path == "/auth/refresh" || path == "/integration/scm/github/webhook"
 }
 
 func (a *AuthMiddlewareHandler) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if a.Skipper(c) {
 			return next(c)
 		}
+		
+		log := appmiddleware.LoggerFromContext(c.Request().Context())
+
 		cookie, err := c.Cookie("access_token")
 		if err != nil || cookie.Value == "" {
+			log.Warn("Access token cookie missing")
 			return echo.NewHTTPError(http.StatusUnauthorized, "access token cookie not found")
 		}
 		userID, err := a.Validator(c, cookie.Value)
 		if err != nil {
+			log.Warn("Token validation failed", zap.Error(err))
 			switch {
 			case errors.Is(err, domain.ErrMissingSecret):
+				log.Error("JWT secret missing from configuration")
 				return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
 			case errors.Is(err, domain.ErrUserLookupFailed):
+				log.Error("Database lookup for user failed during token validation")
 				return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
 			default:
 				return echo.NewHTTPError(http.StatusUnauthorized, "invalid access token")
 			}
 		}
+		
+		log.Info("User authenticated successfully", zap.Int64("user_id", userID))
 		c.Set(UserIDContextKey, userID)
 		return next(c)
 	}
@@ -90,7 +101,7 @@ func (a *AuthMiddlewareHandler) ToMiddleware() echo.MiddlewareFunc {
 	return a.AuthMiddleware
 }
 
-func GetUserID(c echo.Context) (int64, bool) {
+func GetUserID(c *echo.Context) (int64, bool) {
 	userID, ok := c.Get(UserIDContextKey).(int64)
 	return userID, ok
 }

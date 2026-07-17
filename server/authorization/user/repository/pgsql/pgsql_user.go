@@ -6,7 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/sirupsen/logrus"
+	appmiddleware "Zero_Devops/server/middleware"
+	"go.uber.org/zap"
 )
 
 type pqSqlUserRepository struct {
@@ -40,7 +41,8 @@ func (m *pqSqlUserRepository) GetByID(ctx context.Context, id int64) (domain.Use
 		if err == sql.ErrNoRows {
 			return domain.User{}, domain.ErrNotFound
 		}
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to scan user", zap.Error(err))
 		return domain.User{}, err
 	}
 
@@ -71,7 +73,8 @@ func (m *pqSqlUserRepository) GetByUsername(ctx context.Context, username string
 		if err == sql.ErrNoRows {
 			return domain.User{}, domain.ErrNotFound
 		}
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to scan user by username", zap.Error(err))
 		return domain.User{}, err
 	}
 
@@ -102,7 +105,8 @@ func (m *pqSqlUserRepository) GetProviderById(ctx context.Context, providerId in
 		if err == sql.ErrNoRows {
 			return domain.User{}, domain.ErrNotFound
 		}
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to scan user by provider", zap.Error(err))
 		return domain.User{}, err
 	}
 
@@ -132,7 +136,8 @@ func (m *pqSqlUserRepository) UpdateRefreshToken(ctx context.Context, id int64, 
 	stmt, err := m.Conn.PrepareContext(ctx, query)
 
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to prepare update query", zap.Error(err))
 		return err
 	}
 
@@ -140,13 +145,15 @@ func (m *pqSqlUserRepository) UpdateRefreshToken(ctx context.Context, id int64, 
 
 	res, err := stmt.ExecContext(ctx, refreshToken, id)
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to execute update query", zap.Error(err))
 		return err
 	}
 
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to get rows affected", zap.Error(err))
 		return err
 	}
 

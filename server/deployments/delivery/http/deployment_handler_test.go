@@ -3,6 +3,7 @@ package http
 import (
 	middleware "Zero_Devops/server/authorization/auth/delivery/http/middleware"
 	"Zero_Devops/server/domain"
+	"Zero_Devops/server/helper"
 	"bytes"
 	"context"
 	"errors"
@@ -10,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v5"
 )
 
 type mockDeploymentUsecase struct {
@@ -50,7 +51,7 @@ func TestCreateDeployment_Unauthorized(t *testing.T) {
 func TestCreateDeployment_InvalidBody(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/deployments", bytes.NewBufferString("{"))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.Set(middleware.UserIDContextKey, int64(11))
@@ -67,7 +68,7 @@ func TestCreateDeployment_InvalidBody(t *testing.T) {
 func TestCreateDeployment_Success(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/deployments", bytes.NewBufferString(`{"repo_id":42}`))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.Set(middleware.UserIDContextKey, int64(11))
@@ -95,7 +96,7 @@ func TestCreateDeployment_Success(t *testing.T) {
 func TestCreateDeployment_UsecaseError(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/deployments", bytes.NewBufferString(`{"repo_id":42}`))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.Set(middleware.UserIDContextKey, int64(11))
@@ -131,7 +132,7 @@ func TestGetStatusCode(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := getStatusCode(tc.err); got != tc.want {
+			if got := helper.GetStatusCode(tc.err); got != tc.want {
 				t.Fatalf("expected %d, got %d", tc.want, got)
 			}
 		})

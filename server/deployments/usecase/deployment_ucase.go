@@ -11,10 +11,12 @@ import (
 	"sync"
 	"time"
 
+	appmiddleware "Zero_Devops/server/middleware"
+
 	"github.com/golang-jwt/jwt/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 type deployJob struct {
@@ -38,9 +40,13 @@ type deploymentStatusUpdate struct {
 }
 
 func NewDeploymentUsecase(deploymentRepo domain.DeploymentRepository, githubRepo domain.GithubRepository, rmqConn *amqp.Connection) domain.DeploymentUsecase {
-	publishCh, err := rmqConn.Channel()
-	if err != nil {
-		logrus.Fatalf("failed to open publish channel: %v", err)
+	var publishCh *amqp.Channel
+	var err error
+	if rmqConn != nil {
+		publishCh, err = rmqConn.Channel()
+		if err != nil {
+			zap.L().Fatal("failed to open publish channel", zap.Error(err))
+		}
 	}
 
 	uc := &deploymentUsecase{
@@ -53,7 +59,7 @@ func NewDeploymentUsecase(deploymentRepo domain.DeploymentRepository, githubRepo
 	if rmqConn != nil {
 		go func() {
 			if err := uc.consumeStatusUpdate(); err != nil {
-				logrus.Errorf("deployment status consumer stopped: %v", err)
+				zap.L().Error("deployment status consumer stopped", zap.Error(err))
 			}
 		}()
 	}
@@ -122,26 +128,26 @@ func (d *deploymentUsecase) consumeStatusUpdate() error {
 	for msg := range msgs {
 		var update deploymentStatusUpdate
 		if err := json.Unmarshal(msg.Body, &update); err != nil {
-			logrus.Errorf("failed to decode deployment status update: %v", err)
+			zap.L().Error("failed to decode deployment status update", zap.Error(err))
 			_ = msg.Nack(false, false)
 			continue
 		}
 
 		status, ok := normalizeDeploymentStatus(update.Status)
 		if !ok {
-			logrus.Errorf("invalid deployment status update %q for deployment %d", update.Status, update.DeploymentID)
+			zap.L().Error("invalid deployment status update", zap.String("status", update.Status), zap.Int64("deployment_id", update.DeploymentID))
 			_ = msg.Nack(false, false)
 			continue
 		}
 
 		if err := d.deploymentRepo.UpdateStatus(context.Background(), update.DeploymentID, status); err != nil {
-			logrus.Errorf("failed to update deployment %d status to %q: %v", update.DeploymentID, status, err)
+			zap.L().Error("failed to update deployment status", zap.Int64("deployment_id", update.DeploymentID), zap.String("status", string(status)), zap.Error(err))
 			_ = msg.Nack(false, true)
 			continue
 		}
 
 		if err := msg.Ack(false); err != nil {
-			logrus.Errorf("failed to ack deployment status update for deployment %d: %v", update.DeploymentID, err)
+			zap.L().Error("failed to ack deployment status update", zap.Int64("deployment_id", update.DeploymentID), zap.Error(err))
 		}
 	}
 
@@ -166,8 +172,12 @@ func normalizeDeploymentStatus(status string) (domain.DeploymentStatus, bool) {
 }
 
 func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error) {
+	log := appmiddleware.LoggerFromContext(ctx)
+	log.Info("Starting deployment creation", zap.Int64("user_id", userID), zap.Int64("repo_id", repoID))
+
 	installation, err := d.githubRepo.GetInstallationByUserID(ctx, userID)
 	if err != nil {
+		log.Error("Failed to get github installation", zap.Error(err))
 		return nil, fmt.Errorf("failed to get github installation: %w", err)
 	}
 
@@ -202,11 +212,13 @@ func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, 
 
 	instToken, err := d.getInstallationToken(ctx, jwtSigned, installation.InstallationID)
 	if err != nil {
+		log.Error("Failed to get installation token", zap.Error(err))
 		return nil, fmt.Errorf("failed to get installation token: %w", err)
 	}
 
 	cloneURL, err := d.getRepoCloneURL(ctx, instToken, repoID)
 	if err != nil {
+		log.Error("Failed to get repo info", zap.Error(err))
 		return nil, fmt.Errorf("failed to get repo info: %w", err)
 	}
 
@@ -221,13 +233,16 @@ func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, 
 
 	err = d.deploymentRepo.Store(ctx, deployment)
 	if err != nil {
+		log.Error("Failed to store deployment", zap.Error(err))
 		return nil, err
 	}
 
 	if err := d.publishJob(deployment.ID, cloneURL); err != nil {
+		log.Error("Failed to publish deploy job", zap.Error(err))
 		return deployment, fmt.Errorf("failed to publish deploy job: %w", err)
 	}
 
+	log.Info("Successfully triggered deployment job", zap.Int64("deployment_id", deployment.ID))
 	return deployment, nil
 }
 

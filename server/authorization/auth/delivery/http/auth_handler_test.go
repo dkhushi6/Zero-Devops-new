@@ -2,13 +2,14 @@ package http
 
 import (
 	"Zero_Devops/server/domain"
+	"Zero_Devops/server/helper"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v5"
 	"github.com/spf13/viper"
 )
 
@@ -43,41 +44,6 @@ func (m *mockAuthUsecase) Logout(ctx context.Context, accessToken string) error 
 	return m.err
 }
 
-type testContext struct {
-	echo.Context
-	req        *http.Request
-	rec        *httptest.ResponseRecorder
-	cookies    map[string]*http.Cookie
-	queryParams map[string]string
-}
-
-func newTestContext() *testContext {
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	return &testContext{
-		Context:    echo.New().NewContext(req, rec),
-		req:        req,
-		rec:        rec,
-		cookies:    make(map[string]*http.Cookie),
-		queryParams: make(map[string]string),
-	}
-}
-
-func (t *testContext) Cookie(name string) (*http.Cookie, error) {
-	if cookie, ok := t.cookies[name]; ok {
-		return cookie, nil
-	}
-	return nil, http.ErrNoCookie
-}
-
-func (t *testContext) SetCookie(cookie *http.Cookie) {
-	t.cookies[cookie.Name] = cookie
-}
-
-func (t *testContext) QueryParam(name string) string {
-	return t.queryParams[name]
-}
-
 func setTestConfig() {
 	viper.Set("JWT_SECRET", "test-secret-key")
 	viper.Set("IS_PRODUCTION_ENV", false)
@@ -92,16 +58,18 @@ func TestLogin_MissingCode(t *testing.T) {
 		AUsecase: &mockAuthUsecase{},
 	}
 
-	c := newTestContext()
-	c.queryParams["code"] = ""
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/?code=", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Login(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, c.rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
 	}
 }
 
@@ -117,20 +85,22 @@ func TestLogin_Success(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.queryParams["code"] = "test-code"
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/?code=test-code", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Login(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, c.rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	if len(c.cookies) != 2 {
-		t.Errorf("expected 2 cookies, got %d", len(c.cookies))
+	if len(rec.Result().Cookies()) != 2 {
+		t.Errorf("expected 2 cookies, got %d", len(rec.Result().Cookies()))
 	}
 }
 
@@ -143,16 +113,18 @@ func TestLogin_UsecaseError(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.queryParams["code"] = "test-code"
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/?code=test-code", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Login(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, c.rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
 	}
 }
 
@@ -163,15 +135,18 @@ func TestRefresh_MissingCookie(t *testing.T) {
 		AUsecase: &mockAuthUsecase{},
 	}
 
-	c := newTestContext()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Refresh(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, c.rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
 	}
 }
 
@@ -187,16 +162,19 @@ func TestRefresh_Success(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.cookies["refresh_token"] = &http.Cookie{Name: "refresh_token", Value: "test-refresh-token"}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "test-refresh-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Refresh(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, c.rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 }
 
@@ -209,16 +187,19 @@ func TestRefresh_UsecaseError(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.cookies["refresh_token"] = &http.Cookie{Name: "refresh_token", Value: "invalid-token"}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "invalid-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Refresh(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, c.rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
 	}
 }
 
@@ -229,15 +210,18 @@ func TestLogout_MissingCookie(t *testing.T) {
 		AUsecase: &mockAuthUsecase{},
 	}
 
-	c := newTestContext()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Logout(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, c.rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
 	}
 }
 
@@ -248,19 +232,29 @@ func TestLogout_Success(t *testing.T) {
 		AUsecase: &mockAuthUsecase{},
 	}
 
-	c := newTestContext()
-	c.cookies["access_token"] = &http.Cookie{Name: "access_token", Value: "test-access-token"}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "test-access-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Logout(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, c.rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	if accessCookie, ok := c.cookies["access_token"]; !ok || accessCookie.MaxAge != -1 {
+	var accessCookie *http.Cookie
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "access_token" {
+			accessCookie = cookie
+			break
+		}
+	}
+	if accessCookie == nil || accessCookie.MaxAge != -1 {
 		t.Error("expected access_token cookie to be cleared")
 	}
 }
@@ -274,16 +268,19 @@ func TestLogout_UsecaseError(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.cookies["access_token"] = &http.Cookie{Name: "access_token", Value: "test-access-token"}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "test-access-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.Logout(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, c.rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
 	}
 }
 
@@ -294,15 +291,18 @@ func TestGetUser_MissingCookie(t *testing.T) {
 		AUsecase: &mockAuthUsecase{},
 	}
 
-	c := newTestContext()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.GetUser(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, c.rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
 	}
 }
 
@@ -321,19 +321,22 @@ func TestGetUser_Success(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.cookies["access_token"] = &http.Cookie{Name: "access_token", Value: "test-access-token"}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "test-access-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.GetUser(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, c.rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	if !strings.Contains(c.rec.Body.String(), "testuser") {
+	if !strings.Contains(rec.Body.String(), "testuser") {
 		t.Error("expected response to contain username")
 	}
 }
@@ -347,16 +350,19 @@ func TestGetUser_UsecaseError(t *testing.T) {
 		},
 	}
 
-	c := newTestContext()
-	c.cookies["access_token"] = &http.Cookie{Name: "access_token", Value: "test-access-token"}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "test-access-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
 
 	err := handler.GetUser(c)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if c.rec.Code != http.StatusNotFound {
-		t.Errorf("expected status %d, got %d", http.StatusNotFound, c.rec.Code)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, rec.Code)
 	}
 }
 
@@ -373,7 +379,7 @@ func TestGetStatusCode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := getStatusCode(tt.err)
+		result := helper.GetStatusCode(tt.err)
 		if result != tt.expect {
 			t.Errorf("expected %d, got %d for error %v", tt.expect, result, tt.err)
 		}

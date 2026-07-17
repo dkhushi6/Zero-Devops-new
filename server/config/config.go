@@ -20,8 +20,6 @@ func LoadConfig(){
 		if err := viper.ReadInConfig(); err != nil {
 			panic("Error reading config file: " + err.Error())
 		}
-	} else {
-		panic("Error finding .env file (check working directory): " + err.Error())
 	}
 
 	viper.AutomaticEnv()

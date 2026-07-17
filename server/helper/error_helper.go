@@ -4,15 +4,15 @@ import (
 	"Zero_Devops/server/domain"
 	"net/http"
 	rtdebug "runtime/debug"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func BuildErrorResponse(message string,err error,reqId string , opts ...DebugOption) domain.ErrorResponse{
 	resp := domain.ErrorResponse{
 		Success: false,
 		Error: domain.ErrorBody{
-			Code:    getStatusCode(err),
+			Code:    GetStatusCode(err),
 			Message: message,
 		},
 		RequestId: reqId,
@@ -42,12 +42,12 @@ func WithQuery(q string) DebugOption {
     return func(d * domain.DebugInfo) { d.Query = q }
 }
 
-func getStatusCode(err error) int {
+func GetStatusCode(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
 
-	logrus.Error(err)
+	zap.L().Error("An error occurred", zap.Error(err))
 	switch err {
 	case domain.ErrInternalServerError:
 		return http.StatusInternalServerError

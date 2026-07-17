@@ -5,7 +5,9 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/sirupsen/logrus"
+	appmiddleware "Zero_Devops/server/middleware"
+
+	"go.uber.org/zap"
 )
 
 type pgSqlDeploymentRepository struct {
@@ -27,7 +29,8 @@ func (m *pgSqlDeploymentRepository) Store(ctx context.Context, d *domain.Deploym
 	).Scan(&d.ID)
 
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to store deployment", zap.Error(err))
 		return err
 	}
 
@@ -43,7 +46,8 @@ func (m *pgSqlDeploymentRepository) GetByUserID(ctx context.Context, userID int6
 	`
 	rows, err := m.Conn.QueryContext(ctx, query, userID)
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to query deployments by user ID", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
@@ -53,7 +57,8 @@ func (m *pgSqlDeploymentRepository) GetByUserID(ctx context.Context, userID int6
 		var d domain.Deployment
 		err := rows.Scan(&d.ID, &d.UserID, &d.RepoID, &d.CloneURL, &d.Status, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
-			logrus.Error(err)
+			log := appmiddleware.LoggerFromContext(ctx)
+			log.Error("failed to scan deployment", zap.Error(err))
 			return nil, err
 		}
 		deployments = append(deployments, d)
@@ -80,7 +85,8 @@ func (m *pgSqlDeploymentRepository) GetByID(ctx context.Context, userID, id int6
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
 		}
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to scan deployment by ID", zap.Error(err))
 		return nil, err
 	}
 
@@ -95,7 +101,8 @@ func (m *pgSqlDeploymentRepository) UpdateStatus(ctx context.Context, deployment
 	`
 	_, err := m.Conn.ExecContext(ctx, query, status, deploymentID)
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to update deployment status", zap.Error(err))
 		return err
 	}
 

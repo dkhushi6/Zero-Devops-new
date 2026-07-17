@@ -5,7 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/sirupsen/logrus"
+	appmiddleware "Zero_Devops/server/middleware"
+	"go.uber.org/zap"
 )
 
 type pgSqlGithubRepository struct {
@@ -28,7 +29,8 @@ func (m *pgSqlGithubRepository) StoreInstallation(ctx context.Context, inst *dom
 	err := m.Conn.QueryRowContext(ctx, query, inst.UserID, inst.InstallationID, inst.Account_Type, inst.Account_Login, inst.Status, inst.CreatedAt, inst.UpdatedAt).Scan(&inst.ID)
 
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to insert github installation", zap.Error(err))
 		return err
 	}
 
@@ -59,7 +61,8 @@ func (m *pgSqlGithubRepository) GetInstallationByUserID(ctx context.Context, use
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
 		}
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to get github installation", zap.Error(err))
 		return nil, err
 	}
 
@@ -71,13 +74,15 @@ func (m *pgSqlGithubRepository) DeleteInstallationByUserID(ctx context.Context, 
 	stmt, err := m.Conn.PrepareContext(ctx, query)
 
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to prepare delete query", zap.Error(err))
 		return err
 	}
 
 	res, err := stmt.ExecContext(ctx, userId)
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to delete github installation", zap.Error(err))
 		return err
 	}
 
@@ -106,7 +111,8 @@ func (m *pgSqlGithubRepository) UpdateInstallationStatus(ctx context.Context, us
 	stmt, err := m.Conn.PrepareContext(ctx, query)
 
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to prepare status update query", zap.Error(err))
 		return err
 	}
 
@@ -114,13 +120,15 @@ func (m *pgSqlGithubRepository) UpdateInstallationStatus(ctx context.Context, us
 
 	res, err := stmt.ExecContext(ctx, status, userId)
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to update status", zap.Error(err))
 		return err
 	}
 
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
-		logrus.Error(err)
+		log := appmiddleware.LoggerFromContext(ctx)
+		log.Error("failed to get rows affected", zap.Error(err))
 		return err
 	}
 

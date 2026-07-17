@@ -5,8 +5,11 @@ import (
 	"context"
 	"time"
 
+	appmiddleware "Zero_Devops/server/middleware"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 type authUsecase struct {
@@ -53,8 +56,12 @@ func generateTokens(user *domain.User) (string, string, error) {
 }
 
 func (a *authUsecase) HandleOAuthCallback(ctx context.Context, code string, provider string) (*domain.TokenResponse, error) {
+	log := appmiddleware.LoggerFromContext(ctx)
+	log.Info("Handling OAuth callback", zap.String("provider", provider))
+
 	p, ok := a.providers[provider]
 	if !ok {
+		log.Error("Provider not supported", zap.String("provider", provider))
 		return nil, domain.ErrProviderNotSupported
 	}
 
@@ -112,6 +119,9 @@ func (a *authUsecase) HandleOAuthCallback(ctx context.Context, code string, prov
 }
 
 func (a *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*domain.TokenResponse, error) {
+	log := appmiddleware.LoggerFromContext(ctx)
+	log.Info("Handling token refresh")
+
 	secretKey := []byte(viper.GetString("JWT_SECRET"))
 
 	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
@@ -157,8 +167,12 @@ func (a *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*d
 
 // Logout function
 func (a *authUsecase) Logout(ctx context.Context, accessToken string) error {
+	log := appmiddleware.LoggerFromContext(ctx)
+	log.Info("Handling user logout")
+
 	secretKey := (viper.GetString("JWT_SECRET"))
 	if secretKey == "" {
+		log.Error("JWT secret missing from configuration")
 		return domain.ErrMissingSecret
 	}
 	// Validate the Token
@@ -199,8 +213,11 @@ func (a *authUsecase) Logout(ctx context.Context, accessToken string) error {
 }
 
 func (a *authUsecase) GetCurrentUser(ctx context.Context, accessToken string) (domain.UserResponse, error) {
+	log := appmiddleware.LoggerFromContext(ctx)
+
 	secretKey := (viper.GetString("JWT_SECRET"))
 	if secretKey == "" {
+		log.Error("JWT secret missing from configuration")
 		return domain.UserResponse{}, domain.ErrMissingSecret
 	}
 

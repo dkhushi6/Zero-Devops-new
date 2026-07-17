@@ -1,17 +1,16 @@
 package http
 
 import (
-	middleware "Zero_Devops/server/authorization/auth/delivery/http/middleware"
+	authmiddleware "Zero_Devops/server/authorization/auth/delivery/http/middleware"
 	"Zero_Devops/server/domain"
+	"Zero_Devops/server/helper"
+	"Zero_Devops/server/middleware"
+	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
+	"github.com/labstack/echo/v5"
+	"go.uber.org/zap"
 )
-
-type ResponseError struct {
-	Message string `json:"message"`
-}
 
 type DeploymentHandler struct {
 	dUsecase domain.DeploymentUsecase
@@ -28,44 +27,34 @@ type createDeploymentRequest struct {
 	RepoID int64 `json:"repo_id"`
 }
 
-func (h *DeploymentHandler) CreateDeployment(c echo.Context) error {
-	userID, ok := middleware.GetUserID(c)
+func (h *DeploymentHandler) CreateDeployment(c *echo.Context) error {
+	reqID := middleware.GetRequestID(c)
+	log := middleware.LoggerFromContext(c.Request().Context())
+
+	userID, ok := authmiddleware.GetUserID(c)
 	if !ok {
-		return c.JSON(http.StatusUnauthorized, ResponseError{Message: "user id not found"})
+		log.Warn("User ID not found in context")
+		return c.JSON(http.StatusUnauthorized, helper.BuildErrorResponse("user id not found", fmt.Errorf("user id not found in context"), reqID))
 	}
 
 	var req createDeploymentRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, ResponseError{Message: "invalid request body"})
+		log.Warn("Invalid request body for deployment", zap.Error(err))
+		return c.JSON(http.StatusBadRequest, helper.BuildErrorResponse("invalid request body", err, reqID))
 	}
 
 	if req.RepoID == 0 {
-		return c.JSON(http.StatusBadRequest, ResponseError{Message: "repo_id is required"})
+		log.Warn("Missing repo_id in deployment request")
+		return c.JSON(http.StatusBadRequest, helper.BuildErrorResponse("repo_id is required", fmt.Errorf("repo_id is required"), reqID))
 	}
 
 	ctx := c.Request().Context()
 	deployment, err := h.dUsecase.CreateDeployment(ctx, userID, req.RepoID)
 	if err != nil {
-		return c.JSON(getStatusCode(err), ResponseError{Message: err.Error()})
+		log.Error("Failed to create deployment", zap.Error(err), zap.Int64("user_id", userID), zap.Int64("repo_id", req.RepoID))
+		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))
 	}
 
-	return c.JSON(http.StatusCreated, deployment)
-}
-
-func getStatusCode(err error) int {
-	if err == nil {
-		return http.StatusOK
-	}
-
-	logrus.Error(err)
-	switch err {
-	case domain.ErrInternalServerError:
-		return http.StatusInternalServerError
-	case domain.ErrNotFound:
-		return http.StatusNotFound
-	case domain.ErrConflict:
-		return http.StatusConflict
-	default:
-		return http.StatusInternalServerError
-	}
+	log.Info("Deployment created successfully", zap.Int64("deployment_id", deployment.ID))
+	return c.JSON(http.StatusCreated, helper.BuildSuccessResponse(deployment, "Deployment created successfully", reqID))
 }
