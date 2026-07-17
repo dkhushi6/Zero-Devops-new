@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"Zero_Devops/server/domain"
+	"errors"
 	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,35 +29,30 @@ func (a *AuthMiddlewareHandler) Validator(c echo.Context, accessToken string) (i
 	if secretKey == "" {
 		return 0, domain.ErrMissingSecret
 	}
-
 	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (any, error) {
 		return []byte(secretKey), nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil || token == nil || !token.Valid {
 		return 0, domain.ErrInvalidToken
 	}
-
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return 0, domain.ErrInvalidToken
 	}
-
 	userIDFloat, ok := claims["user_id"].(float64)
 	if !ok {
 		return 0, domain.ErrInvalidToken
 	}
 	userID := int64(userIDFloat)
-
 	if a.userRepo != nil {
 		existingUser, err := a.userRepo.GetByID(c.Request().Context(), userID)
 		if err != nil {
-			return 0, err
+			return 0, domain.ErrUserLookupFailed
 		}
 		if existingUser.ID == 0 {
 			return 0, domain.ErrInvalidToken
 		}
 	}
-
 	return userID, nil
 }
 
@@ -70,17 +66,21 @@ func (a *AuthMiddlewareHandler) AuthMiddleware(next echo.HandlerFunc) echo.Handl
 		if a.Skipper(c) {
 			return next(c)
 		}
-
 		cookie, err := c.Cookie("access_token")
 		if err != nil || cookie.Value == "" {
 			return echo.NewHTTPError(http.StatusUnauthorized, "access token cookie not found")
 		}
-
 		userID, err := a.Validator(c, cookie.Value)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "invalid access token")
+			switch {
+			case errors.Is(err, domain.ErrMissingSecret):
+				return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
+			case errors.Is(err, domain.ErrUserLookupFailed):
+				return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
+			default:
+				return echo.NewHTTPError(http.StatusUnauthorized, "invalid access token")
+			}
 		}
-
 		c.Set(UserIDContextKey, userID)
 		return next(c)
 	}

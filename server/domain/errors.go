@@ -26,6 +26,8 @@ var (
 
 	ErrGithubInstallationFetchFailed = errors.New("Github Installation Failed.Error Installing Github App")
 
+	ErrUserLookupFailed 			 = errors.New("User Lookup Failed")
+
 	// Github Webhook Errors
 
 	ErrEventNotSpecifiedToParse  	 = errors.New("no Event specified to parse")

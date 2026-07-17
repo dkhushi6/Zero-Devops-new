@@ -6,24 +6,26 @@ import (
 	"log"
 	"time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/labstack/echo"
-	_ "github.com/lib/pq"
-	"github.com/spf13/viper"
 	_authHttp "Zero_Devops/server/authorization/auth/delivery/http"
 	_authMiddleware "Zero_Devops/server/authorization/auth/delivery/http/middleware"
 	_authUcase "Zero_Devops/server/authorization/auth/usecase"
 	_authProvider "Zero_Devops/server/authorization/auth/usecase/auth_provider"
-	_githubRepo "Zero_Devops/server/integrations/scm/github/repository/pgsql"
-	_githubUsecase "Zero_Devops/server/integrations/scm/github/usecase"
 	_userRepo "Zero_Devops/server/authorization/user/repository/pgsql"
-	_appHttp "Zero_Devops/server/integrations/scm/delivery/http"
+	_config "Zero_Devops/server/config"
 	_deploymentHttp "Zero_Devops/server/deployments/delivery/http"
 	_deploymentRepo "Zero_Devops/server/deployments/repository/pgsql"
 	_deploymentUsecase "Zero_Devops/server/deployments/usecase"
-	_config "Zero_Devops/server/config"
 	domain "Zero_Devops/server/domain"
+	_appHttp "Zero_Devops/server/integrations/scm/delivery/http"
+	_githubRepo "Zero_Devops/server/integrations/scm/github/repository/pgsql"
+	_githubUsecase "Zero_Devops/server/integrations/scm/github/usecase"
+	middleware "Zero_Devops/server/middleware"
 	_queue "Zero_Devops/server/queue"
+
+	"github.com/labstack/echo"
+	_ "github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/spf13/viper"
 )
 
 func init() {
@@ -64,6 +66,9 @@ func main() {
 	// middL := _articleHttpDeliveryMiddleware.InitMiddleware()
 	// e.Use(middL.CORS)
 
+	// request_id middleware
+	e.Use(middleware.RequestIDMiddleware)
+	
 	// database connection pool provides connection pipeline to the reposioties
 	// authorRepo := _authorRepo.NewMysqlAuthorRepository(dbConn)
 	// ar := _articleRepo.NewMysqlArticleRepository(dbConn)
