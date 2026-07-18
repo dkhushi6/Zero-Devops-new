@@ -49,7 +49,7 @@ func (h *DeploymentHandler) CreateDeployment(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	deployment, err := h.dUsecase.CreateDeployment(ctx, userID, req.RepoID)
+	deployment, err := h.dUsecase.CreateDeployment(ctx, userID, req.RepoID , reqID)
 	if err != nil {
 		log.Error("Failed to create deployment", zap.Error(err), zap.Int64("user_id", userID), zap.Int64("repo_id", req.RepoID))
 		return c.JSON(helper.GetStatusCode(err), helper.BuildErrorResponse(err.Error(), err, reqID))

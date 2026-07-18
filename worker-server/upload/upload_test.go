@@ -13,19 +13,22 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"go.uber.org/zap"
 )
+
+var nopLogger = zap.NewNop()
 
 func TestNewUploadUsecaseReturnsDomainInterface(t *testing.T) {
 	var _ domain.UploadUsecase = (*clientUsecase)(nil)
 
-	usecase := NewUploadUsecase(&s3.Client{}, "bucket", "https://cdn.example.com")
+	usecase := NewUploadUsecase(&s3.Client{}, "bucket", "https://cdn.example.com", nopLogger)
 	if usecase == nil {
 		t.Fatal("NewUploadUsecase returned nil")
 	}
 }
 
 func TestUploadImageReturnsErrorForMissingFile(t *testing.T) {
-	usecase := NewUploadUsecase(&s3.Client{}, "bucket", "")
+	usecase := NewUploadUsecase(&s3.Client{}, "bucket", "", nopLogger)
 
 	_, err := usecase.UploadImage(filepath.Join(t.TempDir(), "missing.tar"))
 	if err == nil {
@@ -69,7 +72,7 @@ func TestUploadImageUploadsToS3AndReturnsPublicURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	usecase := NewUploadUsecase(client, "bucket", "https://cdn.example.com")
+	usecase := NewUploadUsecase(client, "bucket", "https://cdn.example.com", nopLogger)
 	gotURL, err := usecase.UploadImage(filePath)
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +112,7 @@ func TestUploadImageReturnsS3URLWithoutPublicBaseURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	usecase := NewUploadUsecase(client, "bucket", "")
+	usecase := NewUploadUsecase(client, "bucket", "", nopLogger)
 	gotURL, err := usecase.UploadImage(filePath)
 	if err != nil {
 		t.Fatal(err)

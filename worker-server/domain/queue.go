@@ -11,6 +11,7 @@ type DeployJob struct {
 	DeploymentID int64  `json:"deployment_id"`
 	CloneURL    string `json:"clone_url"`
 	RetryCount   int    `json:"retry_count"`
+	RequestId	string 	`json:"request_id"`
 }
 
 type DeployStatusMessage struct {

@@ -1,5 +1,7 @@
 package domain
 
+import "go.uber.org/zap"
+
 type WorkerUsecase interface {
-	StartWorker() error
+	StartWorker(baseLogger *zap.Logger) error
 }

@@ -24,6 +24,7 @@ type deployJob struct {
 	CloneURL      string `json:"clone_url"`
 	CallbackQueue string `json:"callback_queue"`
 	RetryCount    int    `json:"retry_count"`
+	RequestId	  string  `json:"request_id"`
 }
 
 type deploymentUsecase struct {
@@ -76,12 +77,15 @@ type githubRepoResponse struct {
 	CloneURL string `json:"clone_url"`
 }
 
-func (d *deploymentUsecase) publishJob(deploymentID int64, cloneURL string) error {
+func (d *deploymentUsecase) publishJob(deploymentID int64, cloneURL string , request_id string) error {
+
+	
 	job := deployJob{
 		DeploymentID:  deploymentID,
 		CloneURL:      cloneURL,
 		CallbackQueue: "deploy.status",
 		RetryCount:    0,
+		RequestId: request_id,
 	}
 	body, err := json.Marshal(job)
 	if err != nil {
@@ -171,7 +175,7 @@ func normalizeDeploymentStatus(status string) (domain.DeploymentStatus, bool) {
 	}
 }
 
-func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error) {
+func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, repoID int64 , request_id string) (*domain.Deployment, error) {
 	log := appmiddleware.LoggerFromContext(ctx)
 	log.Info("Starting deployment creation", zap.Int64("user_id", userID), zap.Int64("repo_id", repoID))
 
@@ -237,7 +241,7 @@ func (d *deploymentUsecase) CreateDeployment(ctx context.Context, userID int64, 
 		return nil, err
 	}
 
-	if err := d.publishJob(deployment.ID, cloneURL); err != nil {
+	if err := d.publishJob(deployment.ID, cloneURL, request_id); err != nil {
 		log.Error("Failed to publish deploy job", zap.Error(err))
 		return deployment, fmt.Errorf("failed to publish deploy job: %w", err)
 	}

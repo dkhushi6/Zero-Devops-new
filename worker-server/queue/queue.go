@@ -2,27 +2,29 @@ package queue
 
 import (
 	"encoding/json"
-	log "github.com/sirupsen/logrus"
 	"Zero_Devops/worker_server/domain"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 )
 
-func failOnError(err error , msg string){
-	if err != nil{
-		log.Panicf("%s : %s",msg,err)
+type queueUsecase struct {
+	queueClient *domain.RabbitMQ
+	logger      *zap.Logger
+}
+
+func NewQueueUsecase(logger *zap.Logger, conn *amqp.Connection, channel *amqp.Channel) domain.QueueUsecase {
+	return &queueUsecase{
+		queueClient: &domain.RabbitMQ{
+			Conn:    conn,
+			Channel: channel,
+		},
+		logger: logger,
 	}
 }
 
-type queueUsecase struct {
-	queueClient	*domain.RabbitMQ
-}
-
-func NewQueueUsecase(conn *amqp.Connection , channel *amqp.Channel) domain.QueueUsecase{
-	return &queueUsecase{
-		queueClient: &domain.RabbitMQ{
-			Conn: conn,
-			Channel: channel,
-		},
+func (r *queueUsecase) failOnError(err error, msg string) {
+	if err != nil {
+		r.logger.Panic(msg, zap.Error(err))
 	}
 }
 
@@ -86,7 +88,7 @@ func (r *queueUsecase) SetUpQueues() error {
 			nil,
 		)
 		if err != nil {
-			failOnError(err, "Failed to create the Exchange")
+			r.failOnError(err, "Failed to create the Exchange")
 			return err
 		}
 	}
@@ -106,13 +108,13 @@ func (r *queueUsecase) SetUpQueues() error {
 			nil,
 		)
 		if err != nil {
-			failOnError(err, "Failed to Create DLQ")
+			r.failOnError(err, "Failed to Create DLQ")
 			return err
 		}
 
 		err = queueChannel.QueueBind("deploy.jobs.dlq", "deploy.jobs.dlq", "deploy.dlx", false, nil)
 		if err != nil {
-			failOnError(err, "Failed to Bind")
+			r.failOnError(err, "Failed to Bind")
 			return err
 		}
 	}
@@ -137,7 +139,7 @@ func (r *queueUsecase) SetUpQueues() error {
 			args_jobs,
 		)
 		if err != nil {
-			failOnError(err, "Failed to declare job queue")
+			r.failOnError(err, "Failed to declare job queue")
 			return err
 		}
 	}
@@ -157,13 +159,13 @@ func (r *queueUsecase) SetUpQueues() error {
 			nil,
 		)
 		if err != nil {
-			failOnError(err, "Failed to Create DLQ")
+			r.failOnError(err, "Failed to Create DLQ")
 			return err
 		}
 
 		err = queueChannel.QueueBind("deploy.status.dlq", "deploy.status.dlq", "deploy.dlx", false, nil)
 		if err != nil {
-			failOnError(err, "Failed to Bind")
+			r.failOnError(err, "Failed to Bind")
 			return err
 		}
 	}
@@ -188,7 +190,7 @@ func (r *queueUsecase) SetUpQueues() error {
 			args_status,
 		)
 		if err != nil {
-			failOnError(err, "Failed to declare status queue")
+			r.failOnError(err, "Failed to declare status queue")
 			return err
 		}
 	}
@@ -200,7 +202,7 @@ func (r* queueUsecase) PublishJob(job domain.DeployJob) error{
 	body, err := json.Marshal(job)
 
 	if err != nil{
-		failOnError(err,"Failed to Receive Jobs")
+		r.failOnError(err,"Failed to Receive Jobs")
 		return err
 	}
 
@@ -221,7 +223,7 @@ func (r* queueUsecase) PublishStatusUpdate(status domain.DeployStatusMessage) er
 	body, err := json.Marshal(status)
 
 	if err != nil{
-		failOnError(err,"Failed to Publish Status")
+		r.failOnError(err,"Failed to Publish Status")
 		return err
 	}
 

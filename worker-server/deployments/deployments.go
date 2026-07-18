@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,9 +17,9 @@ import (
 	"time"
 
 	"Zero_Devops/worker_server/domain"
-
 	"github.com/moby/go-archive"
 	"github.com/moby/moby/client"
+	"go.uber.org/zap"
 )
 
 const buildRoot = "C:\\tmp\\build"
@@ -208,10 +207,10 @@ func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath str
 	return nil
 }
 
-func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase, queueUsecase domain.QueueUsecase , retryCount int) error {
+func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, artifactUploader domain.UploadUsecase, queueUsecase domain.QueueUsecase, retryCount int, logger *zap.Logger) error {
 	deploymentID := strconv.FormatInt(job.DeploymentID, 10)
 
-	log.Printf("Deployment %d: inserting worker deployment row", job.DeploymentID)
+	logger.Info("inserting worker deployment row", zap.Int64("deployment_id", job.DeploymentID))
 
 	if retryCount == 0 {
 		if err := insertDeployment(ctx, db, job); err != nil {
@@ -219,17 +218,17 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 		}
 	}
 
-	log.Printf("Deployment %d: marking as building", job.DeploymentID)
+	logger.Info("marking as building", zap.Int64("deployment_id", job.DeploymentID))
 	if err := updateStatus(ctx, db, job, "building"); err != nil {
 		return err
 	}
 
-	log.Printf("Deployment %d: publishing building status", job.DeploymentID)
+	logger.Info("publishing building status", zap.Int64("deployment_id", job.DeploymentID))
 	if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "building"); err != nil {
 		return err
 	}
 
-	log.Printf("Deployment %d: cloning repository", job.DeploymentID)
+	logger.Info("cloning repository", zap.Int64("deployment_id", job.DeploymentID))
 	repoPath, err := cloneRepo(job.CloneURL, deploymentID)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
@@ -241,7 +240,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 
 	defer os.RemoveAll(repoPath)
 
-	log.Printf("Deployment %d: detecting framework", job.DeploymentID)
+	logger.Info("detecting framework", zap.Int64("deployment_id", job.DeploymentID))
 	builder, err := detectFramework(repoPath)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
@@ -251,10 +250,10 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 		return err
 	}
 	pm := detectPackageManager(repoPath)
-	log.Printf("Deployment %d: framework=%s package_manager=%s", job.DeploymentID, builder.Name, pm)
+	logger.Info("framework detected", zap.Int64("deployment_id", job.DeploymentID), zap.String("framework", builder.Name), zap.String("package_manager", pm))
 
 	if builder.Name != "docker" {
-		log.Printf("Deployment %d: writing Dockerfile from template %s", job.DeploymentID, builder.Template)
+		logger.Info("writing Dockerfile from template", zap.Int64("deployment_id", job.DeploymentID), zap.String("template", builder.Template))
 		if err := writeDockerfile(repoPath, builder, pm); err != nil {
 			_ = updateStatus(ctx, db, job, "failed")
 			if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
@@ -264,7 +263,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 		}
 	}
 
-	log.Printf("Deployment %d: creating Docker client", job.DeploymentID)
+	logger.Info("creating Docker client", zap.Int64("deployment_id", job.DeploymentID))
 	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
@@ -278,7 +277,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	buildCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	log.Printf("Deployment %d: building Docker image %s", job.DeploymentID, imageTag)
+	logger.Info("building Docker image", zap.Int64("deployment_id", job.DeploymentID), zap.String("image_tag", imageTag))
 	if err := buildImage(buildCtx, cli, repoPath, imageTag); err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
 		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
@@ -288,7 +287,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	}
 
 	tarPath := filepath.Join(repoPath, fmt.Sprintf("%d.tar", job.DeploymentID))
-	log.Printf("Deployment %d: saving Docker image tar to %s", job.DeploymentID, tarPath)
+	logger.Info("saving Docker image tar", zap.Int64("deployment_id", job.DeploymentID), zap.String("tar_path", tarPath))
 	if err := saveImageTar(buildCtx, cli, imageTag, tarPath); err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
 		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
@@ -298,7 +297,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 	}
 	defer os.Remove(tarPath)
 
-	log.Printf("Deployment %d: uploading image tar", job.DeploymentID)
+	logger.Info("uploading image tar", zap.Int64("deployment_id", job.DeploymentID))
 	outputURL, err := artifactUploader.UploadImage(tarPath)
 	if err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
@@ -308,7 +307,7 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 		return err
 	}
 
-	log.Printf("Deployment %d: saving output URL", job.DeploymentID)
+	logger.Info("saving output URL", zap.Int64("deployment_id", job.DeploymentID))
 	if err := updateOutputURL(ctx, db, job, outputURL); err != nil {
 		_ = updateStatus(ctx, db, job, "failed")
 		if err := publishStatusUpdate(queueUsecase, job.DeploymentID, "failed"); err != nil {
@@ -317,11 +316,11 @@ func ProcessDeployment(ctx context.Context, db *sql.DB, job domain.DeployJob, ar
 		return err
 	}
 
-	log.Printf("Deployment %d: marking as done", job.DeploymentID)
+	logger.Info("marking as done", zap.Int64("deployment_id", job.DeploymentID))
 	if err := updateStatus(ctx, db, job, "done"); err != nil {
 		return err
 	}
 
-	log.Printf("Deployment %d: publishing done status", job.DeploymentID)
+	logger.Info("publishing done status", zap.Int64("deployment_id", job.DeploymentID))
 	return publishStatusUpdate(queueUsecase, job.DeploymentID, "done")
 }

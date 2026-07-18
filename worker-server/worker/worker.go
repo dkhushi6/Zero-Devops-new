@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	log "github.com/sirupsen/logrus"
 
 	"Zero_Devops/worker_server/deployments"
 	"Zero_Devops/worker_server/domain"
 
 	"github.com/spf13/viper"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+	appMiddleware "Zero_Devops/worker_server/middleware"
 )
 
 type workerUsecase struct {
@@ -26,7 +28,7 @@ func NewWorkerUsecase(queueClient domain.QueueUsecase, db *sql.DB, artifactUploa
 	}
 }
 
-func (w *workerUsecase) StartWorker() error {
+func (w *workerUsecase) StartWorker(baseLogger *zap.Logger) error {
 	r := w.queueClient.Channel()
 
 	err := r.Qos(
@@ -36,7 +38,7 @@ func (w *workerUsecase) StartWorker() error {
 	)
 
 	if err != nil {
-		log.Printf("Error Creating Worker: %v", err)
+		baseLogger.Error("error creating worker", zap.Error(err))
 		return err
 	}
 
@@ -50,20 +52,29 @@ func (w *workerUsecase) StartWorker() error {
 		return err
 	}
 
-	log.Println("Worker consumer registered. Listening for 'deploy.jobs' messages on RabbitMQ...")
+	baseLogger.Info("Worker consumer registered. Listening for 'deploy.jobs' messages on RabbitMQ...")
 
 	for msg := range msgs {
 		var job domain.DeployJob
 
-		log.Printf("Received deploy job message: delivery_tag=%d", msg.DeliveryTag)
 
 		if err := json.Unmarshal(msg.Body, &job); err != nil {
-			log.Printf("Failed to decode deploy job: %v", err)
+			baseLogger.Error("failed to decode deploy job", zap.Error(err))
 			msg.Nack(false, false)
 			continue
 		}
+		
+		reqID := job.RequestId
+		if reqID == "" {
+			reqID = uuid.NewString() // fallback if somehow missing/came from an untraced source
+		}
+		
+		logger := baseLogger.With(zap.String("request_id", reqID))
+		ctx := appMiddleware.WithLogger(context.Background() , logger)
 
-		err := deployments.ProcessDeployment(context.Background(), w.db, job, w.artifactUploader, w.queueClient,job.RetryCount)
+		logger.Info("received deploy job message", zap.Uint64("delivery_tag", msg.DeliveryTag))
+
+		err := deployments.ProcessDeployment(ctx, w.db, job, w.artifactUploader, w.queueClient, job.RetryCount, logger)
 
 		MAX_RETRIES_COUNT := viper.GetInt("MAX_RETRIES_COUNT")
 
@@ -72,7 +83,7 @@ func (w *workerUsecase) StartWorker() error {
 		}
 
 		if err != nil {
-			log.Printf("Deployment job %d failed: %v", job.DeploymentID, err)
+			logger.Error("deployment job failed", zap.Int64("deployment_id", job.DeploymentID), zap.Error(err))
 			job.RetryCount++
 			if job.RetryCount >= MAX_RETRIES_COUNT {
 				msg.Nack(false, false)
@@ -86,10 +97,10 @@ func (w *workerUsecase) StartWorker() error {
 			continue
 		}
 
-		log.Printf("Deployment job %d completed", job.DeploymentID)
+		logger.Info("deployment job completed", zap.Int64("deployment_id", job.DeploymentID))
 		msg.Ack(false)
 	}
 
-	log.Println("Worker consumer delivery channel closed")
+	baseLogger.Info("Worker consumer delivery channel closed")
 	return nil
 }

@@ -26,7 +26,7 @@ type Deployment struct {
 }
 
 type DeploymentUsecase interface {
-	CreateDeployment(ctx context.Context, userID int64, repoID int64) (*Deployment, error)
+	CreateDeployment(ctx context.Context, userID int64, repoID int64 , reqID string) (*Deployment, error)
 	GetDeployments(ctx context.Context, userID int64) ([]Deployment, error)
 	GetDeploymentByID(ctx context.Context, userID, deploymentID int64) (*Deployment, error)
 }

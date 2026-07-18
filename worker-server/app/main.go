@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 
 	"Zero_Devops/worker_server/config"
+	"Zero_Devops/worker_server/logger"
 	"Zero_Devops/worker_server/queue"
 	"Zero_Devops/worker_server/upload"
 	"Zero_Devops/worker_server/worker"
@@ -18,11 +18,19 @@ import (
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func main() {
 	config.LoadConfig()
 
+	baseLogger, err := logger.New(viper.GetString("APP_ENV"))
+	if err != nil {
+		baseLogger.Warn("logger initialized with non-fatal error", zap.Error(err))
+	}
+	zap.ReplaceGlobals(baseLogger)
+	defer baseLogger.Sync()
+	
 	bucketName := viper.GetString("CLOUDFLARE_BUCKET_NAME")
 	accountId := viper.GetString("CLOUDFLARE_ACCOUNT_ID")
 	accessKeyId := viper.GetString("CLOUDFLARE_ACCESS_KEY_ID")
@@ -34,7 +42,7 @@ func main() {
 		aws_config.WithRegion("auto"),
 	)
 	if err != nil {
-		log.Fatal(err)
+		baseLogger.Fatal("failed to load AWS config", zap.Error(err))
 	}
 
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -42,7 +50,7 @@ func main() {
 	})
 
 	// ArtifactUploader Usecase
-	artifactUploader := upload.NewUploadUsecase(client, bucketName, publicBaseURL)
+	artifactUploader := upload.NewUploadUsecase(client, bucketName, publicBaseURL, baseLogger)
 
 	dbHost := viper.GetString("DATABASE_HOST")
 	dbPort := viper.GetString("DATABASE_PORT")
@@ -55,39 +63,39 @@ func main() {
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatal(err)
+		baseLogger.Fatal("failed to open database", zap.Error(err))
 	}
 	if err := db.Ping(); err != nil {
-		log.Fatal(err)
+		baseLogger.Fatal("failed to ping database", zap.Error(err))
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal(err)
+			baseLogger.Fatal("failed to close database", zap.Error(err))
 		}
 	}()
 
 	rmqConn, err := amqp.Dial(viper.GetString("RABBITMQ_CONNECTION_STRING"))
 	if err != nil {
-		log.Fatal(err)
+		baseLogger.Fatal("failed to connect to RabbitMQ", zap.Error(err))
 	}
 	defer rmqConn.Close()
 
 	rmqCh, err := rmqConn.Channel()
 	if err != nil {
-		log.Fatal(err)
+		baseLogger.Fatal("failed to open RabbitMQ channel", zap.Error(err))
 	}
 	defer rmqCh.Close()
 
 	// Queue Usecase
-	queueClient := queue.NewQueueUsecase(rmqConn, rmqCh)
+	queueClient := queue.NewQueueUsecase(baseLogger, rmqConn, rmqCh)
 
 	if err := queueClient.SetUpQueues(); err != nil {
-		log.Fatal(err)
+		baseLogger.Fatal("failed to set up queues", zap.Error(err))
 	}
 
 	// Worker Usecase
 	workerUsecase := worker.NewWorkerUsecase(queueClient, db, artifactUploader)
-	if err := workerUsecase.StartWorker(); err != nil {
-		log.Fatalf("worker stopped: %v", err)
+	if err := workerUsecase.StartWorker(baseLogger); err != nil {
+		baseLogger.Fatal("worker stopped", zap.Error(err))
 	}
 }

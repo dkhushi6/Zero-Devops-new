@@ -6,13 +6,14 @@ import (
 	"Zero_Devops/worker_server/domain"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 )
 
 func TestNewQueueUsecaseStoresConnectionAndChannel(t *testing.T) {
 	conn := &amqp.Connection{}
 	ch := &amqp.Channel{}
 
-	usecase := NewQueueUsecase(conn, ch)
+	usecase := NewQueueUsecase(zap.NewNop(), conn, ch)
 
 	queueClient, ok := usecase.(*queueUsecase)
 	if !ok {

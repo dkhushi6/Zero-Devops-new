@@ -15,12 +15,12 @@ import (
 )
 
 type mockDeploymentUsecase struct {
-	createFn func(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error)
+	createFn func(ctx context.Context, userID int64, repoID int64, reqID string) (*domain.Deployment, error)
 }
 
-func (m *mockDeploymentUsecase) CreateDeployment(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error) {
+func (m *mockDeploymentUsecase) CreateDeployment(ctx context.Context, userID int64, repoID int64, reqID string) (*domain.Deployment, error) {
 	if m.createFn != nil {
-		return m.createFn(ctx, userID, repoID)
+		return m.createFn(ctx, userID, repoID, reqID)
 	}
 	return nil, nil
 }
@@ -76,7 +76,7 @@ func TestCreateDeployment_Success(t *testing.T) {
 	want := &domain.Deployment{ID: 9, UserID: 11, RepoID: 42, Status: domain.DeploymentStatusPending}
 	h := &DeploymentHandler{
 		dUsecase: &mockDeploymentUsecase{
-			createFn: func(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error) {
+			createFn: func(ctx context.Context, userID int64, repoID int64, reqID string) (*domain.Deployment, error) {
 				if userID != 11 || repoID != 42 {
 					t.Fatalf("unexpected args userID=%d repoID=%d", userID, repoID)
 				}
@@ -103,7 +103,7 @@ func TestCreateDeployment_UsecaseError(t *testing.T) {
 
 	h := &DeploymentHandler{
 		dUsecase: &mockDeploymentUsecase{
-			createFn: func(ctx context.Context, userID int64, repoID int64) (*domain.Deployment, error) {
+			createFn: func(ctx context.Context, userID int64, repoID int64, reqID string) (*domain.Deployment, error) {
 				return nil, domain.ErrConflict
 			},
 		},
