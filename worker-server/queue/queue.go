@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"Zero_Devops/worker_server/domain"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
@@ -34,8 +35,12 @@ func (r *queueUsecase) failOnError(err error, msg string) {
 // Close closes the RabbitMQ connection and channel.
 func (r *queueUsecase) Close() {
 	queueClient := r.queueClient
-	queueClient.Conn.Close()
-	queueClient.Channel.Close()
+	if cerr := queueClient.Conn.Close(); cerr != nil {
+		r.logger.Error("failed to close rabbitmq connection", zap.Error(cerr))
+	}
+	if cerr := queueClient.Channel.Close(); cerr != nil {
+		r.logger.Error("failed to close rabbitmq channel", zap.Error(cerr))
+	}
 }
 
 // Channel returns the RabbitMQ channel.
@@ -44,161 +49,73 @@ func (r *queueUsecase) Channel() *amqp.Channel {
 }
 
 // SetUpQueues declares the exchanges and queues required for the worker.
+func (r *queueUsecase) ensureExchange(name, kind string) error {
+	ch, err := r.queueClient.Conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ch.Close() }()
+
+	err = ch.ExchangeDeclarePassive(name, kind, true, false, false, false, nil)
+	if err == nil {
+		return nil
+	}
+
+	return r.queueClient.Channel.ExchangeDeclare(
+		name, kind, true, false, false, false, nil,
+	)
+}
+
+func (r *queueUsecase) ensureQueue(name string, args amqp.Table) error {
+	ch, err := r.queueClient.Conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ch.Close() }()
+
+	_, err = ch.QueueDeclarePassive(name, true, false, false, false, args)
+	if err == nil {
+		return nil
+	}
+
+	_, err = r.queueClient.Channel.QueueDeclare(name, true, false, false, false, args)
+	return err
+}
+
+func (r *queueUsecase) ensureQueueWithDLQ(name, dlqName, _ string, args amqp.Table) error {
+	if err := r.ensureQueue(dlqName, nil); err != nil {
+		return err
+	}
+
+	if err := r.queueClient.Channel.QueueBind(dlqName, dlqName, "deploy.dlx", false, nil); err != nil {
+		return err
+	}
+
+	return r.ensureQueue(name, args)
+}
+
 func (r *queueUsecase) SetUpQueues() error {
-	conn := r.queueClient.Conn
-	queueChannel := r.queueClient.Channel
-
-	// Helper to check if exchange exists
-	exchangeExists := func(name string, kind string) (bool, error) {
-		ch, err := conn.Channel()
-		if err != nil {
-			return false, err
-		}
-		defer func() { _ = ch.Close() }()
-
-		err = ch.ExchangeDeclarePassive(name, kind, true, false, false, false, nil)
-		if err == nil {
-			return true, nil
-		}
-		return false, nil
-	}
-
-	// Helper to check if queue exists
-	queueExists := func(name string, args amqp.Table) (bool, error) {
-		ch, err := conn.Channel()
-		if err != nil {
-			return false, err
-		}
-		defer func() { _ = ch.Close() }()
-
-		_, err = ch.QueueDeclarePassive(name, true, false, false, false, args)
-		if err == nil {
-			return true, nil
-		}
-		return false, nil
-	}
-
-	// 1. Declare Exchange if missing
-	exists, err := exchangeExists("deploy.dlx", "direct")
-	if err != nil {
+	if err := r.ensureExchange("deploy.dlx", "direct"); err != nil {
+		r.failOnError(err, "Failed to create the Exchange")
 		return err
-	}
-	if !exists {
-		err = queueChannel.ExchangeDeclare(
-			"deploy.dlx",
-			"direct",
-			true,
-			false,
-			false,
-			false,
-			nil,
-		)
-		if err != nil {
-			r.failOnError(err, "Failed to create the Exchange")
-			return err
-		}
-	}
-
-	// 2. Declare DEAD LETTER QUEUE FOR JOBS if missing
-	exists, err = queueExists("deploy.jobs.dlq", nil)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		_, err = queueChannel.QueueDeclare(
-			"deploy.jobs.dlq",
-			true,
-			false,
-			false,
-			false,
-			nil,
-		)
-		if err != nil {
-			r.failOnError(err, "Failed to Create DLQ")
-			return err
-		}
-
-		err = queueChannel.QueueBind("deploy.jobs.dlq", "deploy.jobs.dlq", "deploy.dlx", false, nil)
-		if err != nil {
-			r.failOnError(err, "Failed to Bind")
-			return err
-		}
 	}
 
 	argsJobs := amqp.Table{
 		"x-dead-letter-exchange":    "deploy.dlx",
 		"x-dead-letter-routing-key": "deploy.jobs.dlq",
 	}
-
-	// 3. Declare JOBS QUEUE if missing
-	exists, err = queueExists("deploy.jobs", argsJobs)
-	if err != nil {
+	if err := r.ensureQueueWithDLQ("deploy.jobs", "deploy.jobs.dlq", "deploy.jobs.dlq", argsJobs); err != nil {
+		r.failOnError(err, "Failed to set up job queue")
 		return err
-	}
-	if !exists {
-		_, err = queueChannel.QueueDeclare(
-			"deploy.jobs",
-			true,
-			false,
-			false,
-			false,
-			argsJobs,
-		)
-		if err != nil {
-			r.failOnError(err, "Failed to declare job queue")
-			return err
-		}
-	}
-
-	// 4. Declare DEAD LETTER QUEUE FOR STATUS if missing
-	exists, err = queueExists("deploy.status.dlq", nil)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		_, err = queueChannel.QueueDeclare(
-			"deploy.status.dlq",
-			true,
-			false,
-			false,
-			false,
-			nil,
-		)
-		if err != nil {
-			r.failOnError(err, "Failed to Create DLQ")
-			return err
-		}
-
-		err = queueChannel.QueueBind("deploy.status.dlq", "deploy.status.dlq", "deploy.dlx", false, nil)
-		if err != nil {
-			r.failOnError(err, "Failed to Bind")
-			return err
-		}
 	}
 
 	argsStatus := amqp.Table{
 		"x-dead-letter-exchange":    "deploy.dlx",
 		"x-dead-letter-routing-key": "deploy.status.dlq",
 	}
-
-	// 5. Declare STATUS QUEUE if missing
-	exists, err = queueExists("deploy.status", argsStatus)
-	if err != nil {
+	if err := r.ensureQueueWithDLQ("deploy.status", "deploy.status.dlq", "deploy.status.dlq", argsStatus); err != nil {
+		r.failOnError(err, "Failed to set up status queue")
 		return err
-	}
-	if !exists {
-		_, err = queueChannel.QueueDeclare(
-			"deploy.status",
-			true,
-			false,
-			false,
-			false,
-			argsStatus,
-		)
-		if err != nil {
-			r.failOnError(err, "Failed to declare status queue")
-			return err
-		}
 	}
 
 	return nil

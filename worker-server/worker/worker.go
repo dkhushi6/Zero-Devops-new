@@ -10,6 +10,7 @@ import (
 	"Zero_Devops/worker_server/domain"
 
 	appMiddleware "Zero_Devops/worker_server/middleware"
+
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -62,7 +63,9 @@ func (w *workerUsecase) StartWorker(baseLogger *zap.Logger) error {
 
 		if err := json.Unmarshal(msg.Body, &job); err != nil {
 			baseLogger.Error("failed to decode deploy job", zap.Error(err))
-			msg.Nack(false, false)
+			if nackErr := msg.Nack(false, false); nackErr != nil {
+				baseLogger.Error("failed to nack message", zap.Error(nackErr))
+			}
 			continue
 		}
 
@@ -88,19 +91,27 @@ func (w *workerUsecase) StartWorker(baseLogger *zap.Logger) error {
 			logger.Error("deployment job failed", zap.Int64("deployment_id", job.DeploymentID), zap.Error(err))
 			job.RetryCount++
 			if job.RetryCount >= maxRetriesCount {
-				msg.Nack(false, false)
+				if nackErr := msg.Nack(false, false); nackErr != nil {
+					logger.Error("failed to nack message", zap.Error(nackErr))
+				}
 			} else {
 				if err := w.queueClient.PublishJob(job); err != nil {
-					msg.Nack(false, true)
+					if nackErr := msg.Nack(false, true); nackErr != nil {
+						logger.Error("failed to nack message", zap.Error(nackErr))
+					}
 					continue
 				}
-				msg.Ack(false)
+				if ackErr := msg.Ack(false); ackErr != nil {
+					logger.Error("failed to ack message", zap.Error(ackErr))
+				}
 			}
 			continue
 		}
 
 		logger.Info("deployment job completed", zap.Int64("deployment_id", job.DeploymentID))
-		msg.Ack(false)
+		if ackErr := msg.Ack(false); ackErr != nil {
+			logger.Error("failed to ack message", zap.Error(ackErr))
+		}
 	}
 
 	baseLogger.Info("Worker consumer delivery channel closed")

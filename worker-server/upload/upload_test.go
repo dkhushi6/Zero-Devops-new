@@ -68,7 +68,7 @@ func TestUploadImageUploadsToS3AndReturnsPublicURL(t *testing.T) {
 	})
 
 	filePath := filepath.Join(t.TempDir(), "artifact.tar")
-	if err := os.WriteFile(filePath, []byte("image-tar-content"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("image-tar-content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,7 +108,7 @@ func TestUploadImageReturnsS3URLWithoutPublicBaseURL(t *testing.T) {
 	})
 
 	filePath := filepath.Join(t.TempDir(), "artifact.tar")
-	if err := os.WriteFile(filePath, []byte("image-tar-content"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("image-tar-content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

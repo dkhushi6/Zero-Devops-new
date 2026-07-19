@@ -1,3 +1,4 @@
+// Package domain defines core domain types and interfaces for the worker server.
 package domain
 
 import amqp "github.com/rabbitmq/amqp091-go"

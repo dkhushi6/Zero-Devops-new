@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"Zero_Devops/worker_server/domain"
+
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.uber.org/zap"
 )
@@ -18,7 +19,7 @@ type clientUsecase struct {
 }
 
 // NewUploadUsecase creates a new UploadUsecase for uploading artifacts to S3.
-func NewUploadUsecase(client *s3.Client, bucketName string, publicBaseURL string, logger *zap.Logger) domain.UploadUsecase {
+func NewUploadUsecase(client *s3.Client, bucketName, publicBaseURL string, logger *zap.Logger) domain.UploadUsecase {
 	return &clientUsecase{
 		uploadClient: &domain.UploadClient{
 			S3Client:      client,
@@ -34,11 +35,12 @@ func (c *clientUsecase) UploadImage(filePath string) (string, error) {
 	s3Client := c.uploadClient
 
 	c.logger.Info("opening file for upload", zap.String("file", filePath))
+	//nolint:gosec // filePath is constructed internally from the caller (saveImageTar)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file %q: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	filename := filepath.Base(filePath)
 	key := "images/" + filename

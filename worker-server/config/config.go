@@ -9,8 +9,7 @@ import (
 
 // LoadConfig loads environment configuration from .env file and system environment.
 func LoadConfig() {
-
-	// Set up for Enviroment Variables
+	// Set up for Environment Variables
 	viper.SetConfigFile(".env")
 	viper.SetConfigType("env")
 
