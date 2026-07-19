@@ -33,7 +33,6 @@ import (
 )
 
 func run() error {
-
 	_config.LoadConfig()
 
 	if viper.GetBool(`debug`) {
