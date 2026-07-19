@@ -78,12 +78,12 @@ lint: $(GOLANGCI) ## Runs golangci-lint with predefined configuration
 #             https://golang.org/doc/articles/race_detector.html
 build: ## Builds worker-engine binary
 	@ printf "Building worker-engine... "
-	@ go build -trimpath -o ./tmp/worker-engine ./app/
+	@ go build -trimpath -o ./tmp/worker-engine ./cmd/worker-server/
 	@ echo "done"
 
 build-race: ## Builds worker-engine binary (with -race flag)
 	@ printf "Building worker-engine with race flag... "
-	@ go build -trimpath -race -o ./tmp/worker-engine ./app/
+	@ go build -trimpath -race -o ./tmp/worker-engine ./cmd/worker-server/
 	@ echo "done"
 
 go-generate: $(MOCKERY) ## Runs go generate ./...
