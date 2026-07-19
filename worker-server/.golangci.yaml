@@ -75,7 +75,6 @@ linters:
       ignored-functions:
         - strings.SplitN
     nolintlint:
-      allow-leading-space: true
       allow-unused: false
       require-explanation: false
       require-specific: false
@@ -88,9 +87,7 @@ linters:
           - goconst
       - path: app
         text: "don't use `init` function"
-    paths:
-      # - */mocks
-
+    paths: []
 formatters:
   enable:
     - gofmt
