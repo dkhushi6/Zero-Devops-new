@@ -4,6 +4,7 @@ import (
 	"Zero_Devops/server/internal/domain"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,18 +13,18 @@ import (
 )
 
 type mockUserRepository struct {
-	users      map[int64]domain.User
+	users      map[string]domain.User
 	providerID map[int64]domain.User
 }
 
 func newMockUserRepository() *mockUserRepository {
 	return &mockUserRepository{
-		users:      make(map[int64]domain.User),
+		users:      make(map[string]domain.User),
 		providerID: make(map[int64]domain.User),
 	}
 }
 
-func (m *mockUserRepository) GetByID(_ context.Context, id int64) (domain.User, error) {
+func (m *mockUserRepository) GetByID(_ context.Context, id string) (domain.User, error) {
 	if user, ok := m.users[id]; ok {
 		return user, nil
 	}
@@ -31,6 +32,7 @@ func (m *mockUserRepository) GetByID(_ context.Context, id int64) (domain.User, 
 }
 
 func (m *mockUserRepository) GetByUsername(_ context.Context, username string) (domain.User, error) {
+	//nolint:gocritic
 	for _, user := range m.users {
 		if user.Username == username {
 			return user, nil
@@ -47,13 +49,13 @@ func (m *mockUserRepository) GetProviderByID(_ context.Context, providerID int64
 }
 
 func (m *mockUserRepository) Store(_ context.Context, u *domain.User) error {
-	u.ID = int64(len(m.users) + 1)
+	u.ID = fmt.Sprintf("%d", len(m.users)+1)
 	m.users[u.ID] = *u
 	m.providerID[u.ProviderID] = *u
 	return nil
 }
 
-func (m *mockUserRepository) UpdateRefreshToken(_ context.Context, id int64, refreshToken string) error {
+func (m *mockUserRepository) UpdateRefreshToken(_ context.Context, id, refreshToken string) error {
 	if user, ok := m.users[id]; ok {
 		user.RefreshToken = refreshToken
 		m.users[id] = user
@@ -87,7 +89,7 @@ func setJWTSecret() {
 	viper.Set("JWT_SECRET", "test-secret-key-for-testing")
 }
 
-func generateTestToken(userID int64, exp time.Time) string {
+func generateTestToken(userID string, exp time.Time) string {
 	secretKey := []byte(viper.GetString("JWT_SECRET"))
 	claims := jwt.MapClaims{
 		"user_id": userID,
@@ -153,7 +155,7 @@ func TestHandleOAuthCallback_ExistingUser(t *testing.T) {
 
 	mockRepo := newMockUserRepository()
 	existingUser := domain.User{
-		ID:           1,
+		ID:           "1",
 		ProviderID:   12345,
 		Provider:     "github",
 		Username:     "testuser",
@@ -162,7 +164,7 @@ func TestHandleOAuthCallback_ExistingUser(t *testing.T) {
 		CreatedAt:    time.Now(),
 		RefreshToken: "old-refresh-token",
 	}
-	mockRepo.users[1] = existingUser
+	mockRepo.users["1"] = existingUser
 	mockRepo.providerID[12345] = existingUser
 
 	providers := map[string]domain.OAuthProvider{
@@ -196,7 +198,7 @@ func TestRefreshToken_Success(t *testing.T) {
 
 	mockRepo := newMockUserRepository()
 	user := domain.User{
-		ID:           1,
+		ID:           "1",
 		ProviderID:   12345,
 		Provider:     "github",
 		Username:     "testuser",
@@ -204,7 +206,7 @@ func TestRefreshToken_Success(t *testing.T) {
 		CreatedAt:    time.Now(),
 		RefreshToken: "valid-refresh-token",
 	}
-	mockRepo.users[1] = user
+	mockRepo.users["1"] = user
 	mockRepo.providerID[12345] = user
 
 	providers := map[string]domain.OAuthProvider{}
@@ -212,9 +214,9 @@ func TestRefreshToken_Success(t *testing.T) {
 	uc := NewAuthUsecase(mockRepo, providers, time.Second*5)
 	ctx := context.Background()
 
-	refreshToken := generateTestToken(1, time.Now().Add(7*24*time.Hour))
+	refreshToken := generateTestToken("1", time.Now().Add(7*24*time.Hour))
 	user.RefreshToken = refreshToken
-	mockRepo.users[1] = user
+	mockRepo.users["1"] = user
 
 	resp, err := uc.RefreshToken(ctx, refreshToken)
 	if err != nil {
@@ -250,7 +252,7 @@ func TestRefreshToken_UserNotFound(t *testing.T) {
 	uc := NewAuthUsecase(mockRepo, providers, time.Second*5)
 	ctx := context.Background()
 
-	refreshToken := generateTestToken(999, time.Now().Add(7*24*time.Hour))
+	refreshToken := generateTestToken("999", time.Now().Add(7*24*time.Hour))
 
 	_, err := uc.RefreshToken(ctx, refreshToken)
 	if !errors.Is(err, domain.ErrNotFound) {
@@ -263,7 +265,7 @@ func TestLogout_Success(t *testing.T) {
 
 	mockRepo := newMockUserRepository()
 	user := domain.User{
-		ID:           1,
+		ID:           "1",
 		ProviderID:   12345,
 		Provider:     "github",
 		Username:     "testuser",
@@ -271,7 +273,7 @@ func TestLogout_Success(t *testing.T) {
 		CreatedAt:    time.Now(),
 		RefreshToken: "valid-refresh-token",
 	}
-	mockRepo.users[1] = user
+	mockRepo.users["1"] = user
 	mockRepo.providerID[12345] = user
 
 	providers := map[string]domain.OAuthProvider{}
@@ -279,14 +281,14 @@ func TestLogout_Success(t *testing.T) {
 	uc := NewAuthUsecase(mockRepo, providers, time.Second*5)
 	ctx := context.Background()
 
-	accessToken := generateTestToken(1, time.Now().Add(15*time.Minute))
+	accessToken := generateTestToken("1", time.Now().Add(15*time.Minute))
 
 	err := uc.Logout(ctx, accessToken)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	updatedUser, _ := mockRepo.GetByID(ctx, 1)
+	updatedUser, _ := mockRepo.GetByID(ctx, "1")
 	if updatedUser.RefreshToken != "" {
 		t.Error("expected refresh token to be cleared")
 	}
@@ -312,7 +314,7 @@ func TestGetCurrentUser_Success(t *testing.T) {
 
 	mockRepo := newMockUserRepository()
 	user := domain.User{
-		ID:         1,
+		ID:         "1",
 		ProviderID: 12345,
 		Provider:   "github",
 		Username:   "testuser",
@@ -320,7 +322,7 @@ func TestGetCurrentUser_Success(t *testing.T) {
 		AvatarURL:  "https://example.com/avatar.png",
 		CreatedAt:  time.Now(),
 	}
-	mockRepo.users[1] = user
+	mockRepo.users["1"] = user
 	mockRepo.providerID[12345] = user
 
 	providers := map[string]domain.OAuthProvider{}
@@ -328,15 +330,15 @@ func TestGetCurrentUser_Success(t *testing.T) {
 	uc := NewAuthUsecase(mockRepo, providers, time.Second*5)
 	ctx := context.Background()
 
-	accessToken := generateTestToken(1, time.Now().Add(15*time.Minute))
+	accessToken := generateTestToken("1", time.Now().Add(15*time.Minute))
 
 	resp, err := uc.GetCurrentUser(ctx, accessToken)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if resp.ID != 1 {
-		t.Errorf("expected user ID 1, got %d", resp.ID)
+	if resp.ID != "1" {
+		t.Errorf("expected user ID 1, got %s", resp.ID)
 	}
 	if resp.Username != "testuser" {
 		t.Errorf("expected username testuser, got %s", resp.Username)
@@ -370,7 +372,7 @@ func TestGetCurrentUser_UserNotFound(t *testing.T) {
 	uc := NewAuthUsecase(mockRepo, providers, time.Second*5)
 	ctx := context.Background()
 
-	accessToken := generateTestToken(999, time.Now().Add(15*time.Minute))
+	accessToken := generateTestToken("999", time.Now().Add(15*time.Minute))
 
 	_, err := uc.GetCurrentUser(ctx, accessToken)
 	if !errors.Is(err, domain.ErrNotFound) {
