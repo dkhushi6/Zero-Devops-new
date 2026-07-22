@@ -37,7 +37,7 @@ func TestPackBuild_WithGoApp(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_ = exec.Command("docker", "rmi", "-f", imageTag).Run()
+		_ = exec.CommandContext(context.Background(), "docker", "rmi", "-f", imageTag).Run()
 	})
 }
 
