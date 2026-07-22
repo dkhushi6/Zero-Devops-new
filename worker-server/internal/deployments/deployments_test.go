@@ -20,6 +20,12 @@ func TestPackBuild_WithGoApp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping pack build integration test in short mode")
 	}
+	if _, err := exec.LookPath("pack"); err != nil {
+		t.Skip("pack CLI not installed, skipping")
+	}
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker not available, skipping")
+	}
 
 	tmpDir := t.TempDir()
 
