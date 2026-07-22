@@ -1,0 +1,29 @@
+steps:
+  # Run database migrations
+  - name: golang:1.25
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        go run github.com/pressly/goose/v3/cmd/goose@v3.11.0 -dir migrations up
+    env:
+      - 'GOOSE_DRIVER=postgres'
+      - 'GOOSE_DBSTRING=$_WORKER_GOOSE_DBSTRING'
+    dir: 'worker-server'
+
+  # Build with Google Cloud Buildpacks (auto-detects Go, no Dockerfile needed)
+  - name: 'gcr.io/k8s-skaffold/pack'
+    entrypoint: 'pack'
+    args:
+      - 'build'
+      - '$_ARTIFACT_REGISTRY/zero-devops-worker:$SHORT_SHA'
+      - '--builder=gcr.io/buildpacks/builder:latest'
+      - '--publish'
+    dir: 'worker-server'
+
+images:
+  - '$_ARTIFACT_REGISTRY/zero-devops-worker:$SHORT_SHA'
+
+substitutions:
+  _WORKER_GOOSE_DBSTRING: postgres://user:pass@host:5432/zero_devops_build_logs?sslmode=disable
+  _ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/my-project/zero-devops

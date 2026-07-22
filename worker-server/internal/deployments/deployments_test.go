@@ -1,6 +1,45 @@
 package deployments
 
-import "testing"
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+)
+
+func TestPackBuild_InvalidPath(t *testing.T) {
+	ctx := context.Background()
+	err := packBuild(ctx, "/nonexistent/path", "test-image:latest")
+	if err == nil {
+		t.Fatal("expected error for invalid path")
+	}
+}
+
+func TestPackBuild_WithGoApp(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping pack build integration test in short mode")
+	}
+
+	tmpDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"hello\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	imageTag := "pack-test-go-app:latest"
+	err := packBuild(context.Background(), tmpDir, imageTag)
+	if err != nil {
+		t.Fatalf("pack build failed on Go project: %v", err)
+	}
+
+	t.Cleanup(func() {
+		exec.Command("docker", "rmi", "-f", imageTag).Run()
+	})
+}
 
 func TestValidateCloneURL_ValidHTTPSGithub(t *testing.T) {
 	urls := []string{
