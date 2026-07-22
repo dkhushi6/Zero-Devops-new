@@ -143,6 +143,7 @@ func writeDockerfile(repoPath string, builder *Builder, pm string) error {
 // packBuild uses Google Cloud Buildpacks via the `pack` CLI to build a container image.
 // It auto-detects the language/runtime (Go, Node.js, Python, etc.) from the repo contents.
 func packBuild(ctx context.Context, repoPath, imageTag string) error {
+	//nolint:gosec // repoPath is from cloneRepo which validates the URL
 	cmd := exec.CommandContext(ctx, "pack", "build", imageTag,
 		"--builder=gcr.io/buildpacks/builder:latest",
 		"--path="+repoPath,
@@ -153,6 +154,7 @@ func packBuild(ctx context.Context, repoPath, imageTag string) error {
 }
 
 // dockerBuild builds the image using the local Docker daemon with a generated Dockerfile.
+//
 //	func buildImage(ctx context.Context, cli *client.Client, repoPath, imageTag string) error {
 //		buildCtx, err := archive.TarWithOptions(repoPath, &archive.TarOptions{})
 //		if err != nil {

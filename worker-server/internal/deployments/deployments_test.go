@@ -23,10 +23,10 @@ func TestPackBuild_WithGoApp(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.25\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.25\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"hello\") }\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"hello\") }\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -37,7 +37,7 @@ func TestPackBuild_WithGoApp(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		exec.Command("docker", "rmi", "-f", imageTag).Run()
+		_ = exec.Command("docker", "rmi", "-f", imageTag).Run()
 	})
 }
 
