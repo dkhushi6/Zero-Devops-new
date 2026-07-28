@@ -1,5 +1,5 @@
 /**
- * Generic infrastructure types for talking to the Zero DevOps backend.
+ * Generic infrastructure types for talking to the ghost backend.
  *
  * The backend contract is not finalized. These types intentionally describe
  * *shapes*, not specific endpoints, so that when real response envelopes are

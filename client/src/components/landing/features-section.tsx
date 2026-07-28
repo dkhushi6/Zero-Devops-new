@@ -1,68 +1,84 @@
-import { Activity, GitPullRequest, Lock, Radar, Server, Timer } from "lucide-react";
+import { Activity, GitPullRequest, Lock, Radar, RotateCcw, Server, Timer } from "lucide-react";
 
 import { Container } from "@/components/shared/container";
+import { SectionHeader } from "@/components/landing/section-header";
 
 const features = [
   {
     icon: Server,
-    title: "No servers to provision",
+    title: "Runtime without provisioning",
     description:
-      "Every push builds and runs on infrastructure that scales itself. There's no cluster to size and no capacity to plan.",
+      "Framework detection, builds, regions, and scaling happen behind one deployment flow.",
   },
   {
     icon: GitPullRequest,
     title: "Preview every pull request",
     description:
-      "Each PR gets its own isolated environment with a shareable URL, torn down automatically when it's merged or closed.",
+      "Each branch can become an isolated environment with a shareable URL and clean teardown.",
   },
   {
     icon: Radar,
-    title: "Built-in monitoring",
+    title: "Operational signals built in",
     description:
-      "Error rates, latency, and logs are collected from the first deploy — no agent to install, no dashboard to configure.",
+      "Logs, health checks, latency, and release status are part of the deploy surface.",
   },
   {
     icon: Lock,
     title: "TLS and secrets handled",
     description:
-      "Certificates renew themselves and environment secrets stay encrypted at rest, scoped per environment automatically.",
+      "Certificates renew automatically and secrets stay scoped to the environments that need them.",
+  },
+  {
+    icon: RotateCcw,
+    title: "Rollback as a first-class action",
+    description:
+      "Every successful deploy becomes a restore point, so recovery does not need a runbook.",
   },
   {
     icon: Timer,
-    title: "Rollback in one click",
+    title: "Fast path for small teams",
     description:
-      "Every deploy is a restore point. If something regresses, go back to the last known-good build immediately.",
+      "Ship the product before you spend a week designing CI, runtime, monitoring, and domains.",
   },
-  {
-    icon: Activity,
-    title: "Autoscaling by default",
-    description:
-      "Traffic spikes are absorbed automatically and scaled back down after, so you never pay for idle capacity.",
-  },
-];
+] as const;
 
 export function FeaturesSection() {
   return (
     <section id="product" className="border-t border-border/60 py-20 md:py-28">
       <Container>
-        <div className="max-w-xl">
-          <h2 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Everything a DevOps team would set up, done for you.
-          </h2>
-          <p className="mt-4 text-muted-foreground">
-            You get the outcomes of a dedicated platform team without hiring
-            one, configuring one, or being paged by one at 2am.
-          </p>
+        <SectionHeader
+          eyebrow="Product"
+          title="The deployment platform layer, compressed into one workflow."
+          description="The page is built for developers who want production outcomes without becoming infrastructure operators."
+        />
+
+        <div className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
+          {features.map(({ icon: Icon, title, description }) => (
+            <article key={title} className="flex min-h-52 flex-col justify-between bg-card p-6">
+              <div className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Icon className="size-5" />
+              </div>
+              <div className="mt-8 flex flex-col gap-2">
+                <h3 className="text-base font-medium text-foreground">{title}</h3>
+                <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+              </div>
+            </article>
+          ))}
         </div>
 
-        <div className="mt-14 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ icon: Icon, title, description }) => (
-            <div key={title} className="flex flex-col gap-3 bg-surface p-6">
-              <Icon className="size-5 text-primary" />
-              <h3 className="text-sm font-medium text-foreground">{title}</h3>
-              <p className="text-sm text-muted-foreground">{description}</p>
+        <div className="mt-8 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Activity className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-foreground">Designed around deployment state</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Every UI pattern points users back to builds, releases, health, and recovery.
+              </p>
             </div>
-          ))}
+          </div>
+          <p className="font-mono text-xs text-muted-foreground">push / build / deploy / monitor</p>
         </div>
       </Container>
     </section>

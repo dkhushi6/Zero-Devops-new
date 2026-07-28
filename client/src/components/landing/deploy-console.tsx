@@ -6,7 +6,7 @@ import { Check, GitBranch } from "lucide-react";
 const steps = [
   { label: "Detected framework", detail: "Next.js 15 · App Router" },
   { label: "Provisioned runtime", detail: "no Dockerfile, no cluster" },
-  { label: "Configured TLS + domain", detail: "app.zero-devops.dev" },
+  { label: "Configured TLS + domain", detail: "app.ghost.dev" },
   { label: "Deployed", detail: "3 regions · autoscaled" },
 ];
 

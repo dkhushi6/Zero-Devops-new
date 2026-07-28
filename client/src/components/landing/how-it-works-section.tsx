@@ -1,46 +1,51 @@
+import { GitBranch, MonitorCheck, PackageCheck, Rocket } from "lucide-react";
+
 import { Container } from "@/components/shared/container";
+import { SectionHeader } from "@/components/landing/section-header";
+import { WorkflowStep } from "@/components/landing/workflow-step";
 
 const steps = [
   {
+    icon: GitBranch,
     number: "01",
     title: "Connect a repository",
-    description: "Authorize GitHub and pick the repo you want running. No config files required.",
+    description: "Authorize GitHub and choose the repo that should become a live service.",
   },
   {
+    icon: PackageCheck,
     number: "02",
-    title: "Push to your branch",
-    description: "Every push triggers a build. Zero DevOps detects your framework and builds it correctly.",
+    title: "Let ghost detect it",
+    description: "The platform reads the framework, package manager, build command, and runtime needs.",
   },
   {
+    icon: Rocket,
     number: "03",
-    title: "It's live",
-    description: "TLS, a domain, monitoring, and autoscaling are already in place by the time the build finishes.",
+    title: "Ship on every push",
+    description: "Builds produce immutable releases with live URLs, TLS, regions, and rollback points.",
   },
-];
+  {
+    icon: MonitorCheck,
+    number: "04",
+    title: "Operate from one place",
+    description: "Watch status, logs, health, and deployment history without wiring separate tools.",
+  },
+] as const;
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="border-t border-border/60 py-20 md:py-28">
+    <section id="workflow" className="border-t border-border/60 py-20 md:py-28">
       <Container>
-        <h2 className="max-w-xl text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          From push to production, in order.
-        </h2>
+        <SectionHeader
+          eyebrow="Workflow"
+          title="A production path that follows how developers already work."
+          description="The interface should make the deployment lifecycle obvious before users connect their first repository."
+        />
 
-        <ol className="mt-14 grid gap-10 sm:grid-cols-3 sm:gap-6">
-          {steps.map((step, index) => (
-            <li key={step.number} className="relative flex flex-col gap-3">
-              <span className="font-mono text-sm text-primary">{step.number}</span>
-              <h3 className="text-base font-medium text-foreground">{step.title}</h3>
-              <p className="text-sm text-muted-foreground">{step.description}</p>
-              {index < steps.length - 1 ? (
-                <span
-                  aria-hidden
-                  className="absolute right-[-1.5rem] top-1.5 hidden h-px w-6 bg-border sm:block"
-                />
-              ) : null}
-            </li>
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step) => (
+            <WorkflowStep key={step.number} {...step} />
           ))}
-        </ol>
+        </div>
       </Container>
     </section>
   );

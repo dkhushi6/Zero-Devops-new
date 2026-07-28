@@ -10,8 +10,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: `${siteConfig.name} — ${siteConfig.tagline}`,
-    template: `%s · ${siteConfig.name}`,
+    default: `${siteConfig.name} - ${siteConfig.tagline}`,
+    template: `%s - ${siteConfig.name}`,
   },
   description: siteConfig.description,
   openGraph: {
@@ -27,13 +27,13 @@ export const metadata: Metadata = {
     description: siteConfig.description,
   },
   icons: {
-    icon: "/favicon.svg",
+    icon: "/logo.svg",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0c0e",
-  colorScheme: "dark",
+  themeColor: "#141235",
+  colorScheme: "dark light",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -7,8 +7,7 @@ import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 const links = [
   { href: "#product", label: "Product" },
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#pricing", label: "Pricing" },
+  { href: "#workflow", label: "Workflow" },
 ] as const;
 
 export function Navbar() {

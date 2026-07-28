@@ -86,12 +86,17 @@ const config: Config = {
           "0%": { transform: "scale(0.9)", opacity: "0.6" },
           "80%, 100%": { transform: "scale(1.6)", opacity: "0" },
         },
+        "gradient-shift": {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-up": "fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "pulse-ring": "pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "gradient-shift": "gradient-shift 8s ease infinite",
       },
       backgroundImage: {
         "grid-pattern":

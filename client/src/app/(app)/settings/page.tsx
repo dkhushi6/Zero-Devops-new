@@ -18,7 +18,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>
-          <CardDescription>Manage the identity connected to Zero DevOps.</CardDescription>
+          <CardDescription>Manage the identity connected to ghost.</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
