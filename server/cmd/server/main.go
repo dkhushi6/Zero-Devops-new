@@ -72,6 +72,7 @@ func run() error {
 
 	e := echo.New()
 
+	e.Use(middleware.NewCORS())
 	e.Use(middleware.RequestIDMiddleware)
 	e.Use(middleware.RequestLoggerMiddleware(baseLogger))
 
