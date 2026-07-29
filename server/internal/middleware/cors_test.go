@@ -123,3 +123,23 @@ func TestCORS_AllowsConfiguredMethods(t *testing.T) {
 		t.Error("expected Access-Control-Allow-Methods header in preflight response")
 	}
 }
+
+func TestCORS_IgnoresBlankOrigins(t *testing.T) {
+	resetViperForCORS()
+	viper.Set("ALLOWED_ORIGINS", " , https://myapp.com, ")
+
+	e := echo.New()
+	e.Use(NewCORS())
+	e.GET("/test", func(c *echo.Context) error {
+		return c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
+	req.Header.Set("Origin", "https://myapp.com")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Header().Get("Access-Control-Allow-Origin") != "https://myapp.com" {
+		t.Errorf("expected Access-Control-Allow-Origin 'https://myapp.com', got '%s'", rec.Header().Get("Access-Control-Allow-Origin"))
+	}
+}

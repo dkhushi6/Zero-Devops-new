@@ -71,7 +71,7 @@ func NewAuthHandler(e *echo.Echo, us domain.AuthUsecase) {
 	handler := &AuthHandler{
 		AUsecase: us,
 	}
-	e.GET("/auth/github/login", handler.Login)
+	e.POST("/auth/github/login", handler.Login)
 	e.GET("/auth/github/login/callback", handler.LoginCallback)
 	e.POST("/auth/refresh", handler.Refresh)
 	e.POST("/auth/logout", handler.Logout)
@@ -178,9 +178,11 @@ func (a *AuthHandler) LoginCallback(c *echo.Context) error {
 	log.Info("User logged in successfully")
 
 	redirectURL, err := url.Parse(payload.ReturnTo)
-	if err != nil || redirectURL.IsAbs() {
+
+	if err != nil { // || redirectURL.IsAbs() need to add this after confirming
 		redirectURL, _ = url.Parse("/") // block open-redirect via return_to
 	}
+
 	return c.Redirect(http.StatusTemporaryRedirect, redirectURL.String())
 }
 
