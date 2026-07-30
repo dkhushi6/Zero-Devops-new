@@ -140,63 +140,16 @@ func writeDockerfile(repoPath string, builder *Builder, pm string) error {
 	return os.WriteFile(filepath.Join(repoPath, templateDockerfile), []byte(content), 0o600) //nolint:mnd // file permission
 }
 
-// packBuild uses Google Cloud Buildpacks via the `pack` CLI to build a container image.
-// It auto-detects the language/runtime (Go, Node.js, Python, etc.) from the repo contents.
-func packBuild(ctx context.Context, repoPath, imageTag string) error {
+func buildImage(ctx context.Context, repoPath, imageTag string) error {
 	//nolint:gosec // repoPath is from cloneRepo which validates the URL
-	cmd := exec.CommandContext(ctx, "pack", "build", imageTag,
-		"--builder=gcr.io/buildpacks/builder:latest",
-		"--path="+repoPath,
+	cmd := exec.CommandContext(ctx, "docker", "build",
+		"-t", imageTag,
+		"-f", filepath.Join(repoPath, templateDockerfile),
+		repoPath,
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-// dockerBuild builds the image using the local Docker daemon with a generated Dockerfile.
-//
-//	func buildImage(ctx context.Context, cli *client.Client, repoPath, imageTag string) error {
-//		buildCtx, err := archive.TarWithOptions(repoPath, &archive.TarOptions{})
-//		if err != nil {
-//			return err
-//		}
-//		defer func() { _ = buildCtx.Close() }()
-//
-//		opts := client.ImageBuildOptions{
-//			Dockerfile: templateDockerfile,
-//			Tags:       []string{imageTag},
-//			Remove:     true,
-//		}
-//
-//		result, err := cli.ImageBuild(ctx, buildCtx, opts)
-//		if err != nil {
-//			return err
-//		}
-//		defer func() { _ = result.Body.Close() }()
-//
-//		scanner := bufio.NewScanner(result.Body)
-//		var lastLine string
-//		for scanner.Scan() {
-//			lastLine = scanner.Text()
-//			fmt.Println(lastLine)
-//		}
-//		if err := scanner.Err(); err != nil {
-//			return err
-//		}
-//
-//		var errCheck struct {
-//			Error string `json:"error"`
-//		}
-//		if lastLine != "" {
-//			_ = json.Unmarshal([]byte(lastLine), &errCheck)
-//		}
-//		if errCheck.Error != "" {
-//			return fmt.Errorf("build failed: %s", errCheck.Error)
-//		}
-//		return nil
-//	}
-func buildImage(ctx context.Context, _ *client.Client, repoPath, imageTag string) error {
-	return packBuild(ctx, repoPath, imageTag)
 }
 
 func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath string) error {
@@ -270,7 +223,7 @@ func cloneAndPrepare(repoPath string, job domain.DeployJob, logger *zap.Logger, 
 
 func buildAndSaveImage(ctx context.Context, job domain.DeployJob, cli *client.Client, repoPath, imageTag string, logger *zap.Logger) (string, error) {
 	logger.Info("building Docker image", zap.String("deployment_id", job.DeploymentID), zap.String("image_tag", imageTag))
-	if err := buildImage(ctx, cli, repoPath, imageTag); err != nil {
+	if err := buildImage(ctx, repoPath, imageTag); err != nil {
 		return "", err
 	}
 
@@ -324,7 +277,7 @@ func ProcessDeployment(
 
 	defer func() { _ = os.RemoveAll(repoPath) }()
 
-	if _, err := cloneAndPrepare(repoPath, job, logger, true); err != nil {
+	if _, err := cloneAndPrepare(repoPath, job, logger, false); err != nil {
 		return markFailed(ctx, repo, job, queueUsecase, "clone/prepare failed: "+err.Error())
 	}
 
