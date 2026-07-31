@@ -21,8 +21,6 @@ import (
 )
 
 const (
-	buildRoot = "C:\\tmp\\build"
-
 	pkgManagerNPM  = "npm"
 	pkgManagerPNPM = "pnpm"
 	pkgManagerYarn = "yarn"
@@ -46,6 +44,13 @@ var pmInstallCommands = map[string]string{
 	pkgManagerYarn: "yarn install --frozen-lockfile --ignore-scripts",
 	pkgManagerBun:  "bun install --frozen-lockfile --ignore-scripts",
 }
+
+var buildRoot = func() string {
+	if root := os.Getenv("BUILD_ROOT"); root != "" {
+		return root
+	}
+	return filepath.Join(os.TempDir(), "zerodevops-build")
+}()
 
 const gitCloneTimeout = 60 * time.Second
 
