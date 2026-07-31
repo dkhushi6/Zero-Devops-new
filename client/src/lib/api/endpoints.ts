@@ -4,6 +4,6 @@ export const endpoints = {
     githubLogin: "/auth/github/login",
     logout: "/auth/logout",
     refresh: "/auth/refresh",
-    me: "/auth/me",
+    me: "/auth/user/me",
   },
 } as const;

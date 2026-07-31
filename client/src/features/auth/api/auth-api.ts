@@ -18,7 +18,7 @@ import type { CurrentUserDto } from "../types/dto";
  */
 export function getGithubLoginUrl(returnTo = "/dashboard"): string {
   const url = new URL(endpoints.auth.githubLogin, env.NEXT_PUBLIC_API_URL);
-  url.searchParams.set("return_to", new URL(returnTo, env.NEXT_PUBLIC_APP_URL).toString());
+  url.searchParams.set("return_to", returnTo);
   return url.toString();
 }
 

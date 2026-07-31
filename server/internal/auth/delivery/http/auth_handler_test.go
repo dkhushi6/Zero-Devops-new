@@ -59,6 +59,7 @@ func setTestConfig() {
 	viper.Set("IS_PRODUCTION_ENV", false)
 	viper.Set("ACCESS_TOKEN_EXPIRY", "1")
 	viper.Set("REFRESH_TOKEN_EXPIRY", "720")
+	viper.Set("FRONTEND_URL", "http://localhost:3000")
 }
 
 func TestLogin_DefaultReturnTo(t *testing.T) {
@@ -71,7 +72,7 @@ func TestLogin_DefaultReturnTo(t *testing.T) {
 	}
 
 	e := echo.New()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/github/login", http.NoBody)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/github/login", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -100,7 +101,7 @@ func TestLogin_Success(t *testing.T) {
 	}
 
 	e := echo.New()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/github/login?return_to=/dashboard", http.NoBody)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/github/login?return_to=/dashboard", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -119,15 +120,15 @@ func TestLogin_Success(t *testing.T) {
 	}
 
 	cookies := rec.Result().Cookies()
-	var hasStateCookie bool
-	for _, cookie := range cookies {
-		if cookie.Name == "gh_oauth_state" {
-			hasStateCookie = true
-			break
-		}
+	stateCookie := findCookie(cookies, "gh_oauth_state")
+	if stateCookie == nil {
+		t.Fatal("expected gh_oauth_state cookie to be set")
 	}
-	if !hasStateCookie {
-		t.Error("expected gh_oauth_state cookie to be set")
+	if stateCookie.SameSite != http.SameSiteLaxMode {
+		t.Errorf("expected gh_oauth_state cookie SameSite=Lax, got %v", stateCookie.SameSite)
+	}
+	if !stateCookie.Secure {
+		t.Error("expected gh_oauth_state cookie to be Secure")
 	}
 }
 
@@ -141,7 +142,7 @@ func TestLogin_UsecaseError(t *testing.T) {
 	}
 
 	e := echo.New()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/github/login", http.NoBody)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/github/login", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -203,6 +204,28 @@ func TestRefresh_Success(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	accessCookie := findCookie(rec.Result().Cookies(), "access_token")
+	if accessCookie == nil {
+		t.Fatal("expected access_token cookie to be set")
+	}
+	if accessCookie.SameSite != http.SameSiteNoneMode {
+		t.Errorf("expected access_token cookie SameSite=None, got %v", accessCookie.SameSite)
+	}
+	if !accessCookie.Secure {
+		t.Error("expected access_token cookie to be Secure")
+	}
+
+	refreshCookie := findCookie(rec.Result().Cookies(), "refresh_token")
+	if refreshCookie == nil {
+		t.Fatal("expected refresh_token cookie to be set")
+	}
+	if refreshCookie.SameSite != http.SameSiteNoneMode {
+		t.Errorf("expected refresh_token cookie SameSite=None, got %v", refreshCookie.SameSite)
+	}
+	if !refreshCookie.Secure {
+		t.Error("expected refresh_token cookie to be Secure")
 	}
 }
 
@@ -286,6 +309,11 @@ func TestLogout_Success(t *testing.T) {
 	}
 	if accessCookie == nil || accessCookie.MaxAge != -1 {
 		t.Error("expected access_token cookie to be cleared")
+	}
+
+	refreshCookie := findCookie(rec.Result().Cookies(), "refresh_token")
+	if refreshCookie == nil || refreshCookie.MaxAge != -1 {
+		t.Error("expected refresh_token cookie to be cleared")
 	}
 }
 
@@ -404,6 +432,15 @@ func validStateCookie(returnTo string) *http.Cookie {
 	b, _ := json.Marshal(payload)
 	//nolint:gosec
 	return &http.Cookie{Name: "gh_oauth_state", Value: base64.URLEncoding.EncodeToString(b), HttpOnly: true, SameSite: http.SameSiteLaxMode}
+}
+
+func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
 }
 
 func TestLoginCallback_MissingStateCookie(t *testing.T) {
@@ -550,12 +587,85 @@ func TestLoginCallback_Success(t *testing.T) {
 	}
 
 	location := rec.Header().Get("Location")
-	if location != "/dashboard" {
-		t.Errorf("expected redirect to /dashboard, got %s", location)
+	if location != "http://localhost:3000/dashboard" {
+		t.Errorf("expected redirect to http://localhost:3000/dashboard, got %s", location)
 	}
 
-	if len(rec.Result().Cookies()) != 2 {
-		t.Errorf("expected 2 cookies, got %d", len(rec.Result().Cookies()))
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 3 {
+		t.Fatalf("expected 3 cookies (state cleared + access + refresh), got %d", len(cookies))
+	}
+
+	stateCookie := findCookie(cookies, "gh_oauth_state")
+	if stateCookie == nil || stateCookie.MaxAge != -1 {
+		t.Error("expected gh_oauth_state cookie to be cleared")
+	}
+
+	accessCookie := findCookie(cookies, "access_token")
+	if accessCookie == nil {
+		t.Fatal("expected access_token cookie to be set")
+	}
+	if accessCookie.SameSite != http.SameSiteNoneMode {
+		t.Errorf("expected access_token cookie SameSite=None, got %v", accessCookie.SameSite)
+	}
+	if !accessCookie.Secure {
+		t.Error("expected access_token cookie to be Secure")
+	}
+
+	refreshCookie := findCookie(cookies, "refresh_token")
+	if refreshCookie == nil {
+		t.Fatal("expected refresh_token cookie to be set")
+	}
+	if refreshCookie.SameSite != http.SameSiteNoneMode {
+		t.Errorf("expected refresh_token cookie SameSite=None, got %v", refreshCookie.SameSite)
+	}
+	if !refreshCookie.Secure {
+		t.Error("expected refresh_token cookie to be Secure")
+	}
+}
+
+func TestLoginCallback_OpenRedirectBlocked(t *testing.T) {
+	setTestConfig()
+
+	handler := &AuthHandler{
+		AUsecase: &mockAuthUsecase{
+			tokens: &domain.TokenResponse{
+				AccessToken:  "test-access-token",
+				RefreshToken: "test-refresh-token",
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		returnTo string
+	}{
+		{name: "absolute URL", returnTo: "https://evil.example"},
+		{name: "network-path reference", returnTo: "//evil.example"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/github/login/callback?state=test-state&code=test-code", http.NoBody)
+			req.AddCookie(validStateCookie(tt.returnTo))
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			err := handler.LoginCallback(c)
+			if err != nil {
+				t.Fatalf("expected nil error, got %v", err)
+			}
+
+			if rec.Code != http.StatusTemporaryRedirect {
+				t.Errorf("expected status %d, got %d", http.StatusTemporaryRedirect, rec.Code)
+			}
+
+			location := rec.Header().Get("Location")
+			if location != "http://localhost:3000/" {
+				t.Errorf("expected redirect to http://localhost:3000/, got %s", location)
+			}
+		})
 	}
 }
 

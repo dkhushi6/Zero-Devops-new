@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * BACKEND INTEGRATION POINT: this must match the name of the HttpOnly
- * session cookie the backend sets after a successful GitHub OAuth callback.
- * Placeholder until the backend contract is finalized.
+ * Must match the HttpOnly access token cookie the backend sets after a
+ * successful GitHub OAuth callback (see auth_handler.go). The refresh token
+ * lives in a sibling `refresh_token` cookie; the presence of the access
+ * token is the coarse "logged in" signal this middleware relies on.
  */
-const SESSION_COOKIE_NAME = "zdo_session";
+const SESSION_COOKIE_NAME = "access_token";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/deployments", "/settings"];
 const AUTH_ONLY_PREFIXES = ["/login"];

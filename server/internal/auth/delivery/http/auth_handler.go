@@ -36,14 +36,14 @@ const (
 )
 
 //nolint:gosec
-func writeCookie(token, cookieName string, expiryTime time.Duration) *http.Cookie {
+func writeCookie(token, cookieName string, expiryTime time.Duration, sameSite http.SameSite) *http.Cookie {
 	return &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
 		MaxAge:   int(expiryTime.Seconds()),
-		Secure:   viper.GetBool("IS_PRODUCTION_ENV"),
+		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite, // added the isNone during development since the client and server are on different origins
 		Path:     "/",
 	}
 }
@@ -71,7 +71,7 @@ func NewAuthHandler(e *echo.Echo, us domain.AuthUsecase) {
 	handler := &AuthHandler{
 		AUsecase: us,
 	}
-	e.POST("/auth/github/login", handler.Login)
+	e.GET("/auth/github/login", handler.Login)
 	e.GET("/auth/github/login/callback", handler.LoginCallback)
 	e.POST("/auth/refresh", handler.Refresh)
 	e.POST("/auth/logout", handler.Logout)
@@ -102,7 +102,7 @@ func (a *AuthHandler) Login(c *echo.Context) error {
 	payloadBytes, _ := json.Marshal(payload)
 	encodedPayload := base64.URLEncoding.EncodeToString(payloadBytes)
 
-	stateCookie := writeCookie(encodedPayload, "gh_oauth_state", stateCookieMaxAge)
+	stateCookie := writeCookie(encodedPayload, "gh_oauth_state", stateCookieMaxAge, http.SameSiteLaxMode)
 
 	c.SetCookie(stateCookie)
 
@@ -145,6 +145,10 @@ func (a *AuthHandler) LoginCallback(c *echo.Context) error {
 		return c.JSON(http.StatusForbidden, helper.BuildErrorResponse("state mismatch", err, reqID))
 	}
 
+	stateCookie := writeCookie("", "gh_oauth_state", 0, http.SameSiteLaxMode)
+	stateCookie.MaxAge = -1
+	c.SetCookie(stateCookie)
+
 	code := c.QueryParam("code")
 	if code == "" {
 		log.Warn("Missing OAuth code parameter")
@@ -169,21 +173,25 @@ func (a *AuthHandler) LoginCallback(c *echo.Context) error {
 		refreshExpiry = 720
 	}
 
-	accessTokenCookie := writeCookie(tokens.AccessToken, "access_token", time.Duration(accessExpiry)*time.Hour)
-	refreshTokenCookie := writeCookie(tokens.RefreshToken, "refresh_token", time.Duration(refreshExpiry)*time.Hour)
+	accessTokenCookie := writeCookie(tokens.AccessToken, "access_token", time.Duration(accessExpiry)*time.Hour, http.SameSiteNoneMode)
+	refreshTokenCookie := writeCookie(tokens.RefreshToken, "refresh_token", time.Duration(refreshExpiry)*time.Hour, http.SameSiteNoneMode)
 
 	c.SetCookie(accessTokenCookie)
 	c.SetCookie(refreshTokenCookie)
 
 	log.Info("User logged in successfully")
 
-	redirectURL, err := url.Parse(payload.ReturnTo)
+	redirectPage, err := url.Parse(payload.ReturnTo)
 
-	if err != nil { // || redirectURL.IsAbs() need to add this after confirming
-		redirectURL, _ = url.Parse("/") // block open-redirect via return_to
+	FRONTEND_URL := viper.GetString("FRONTEND_URL")
+
+	if err != nil || redirectPage.IsAbs() || redirectPage.Host != "" {
+		redirectPage, _ = url.Parse("/") // block open-redirect via return_to
 	}
 
-	return c.Redirect(http.StatusTemporaryRedirect, redirectURL.String())
+	redirectURL := fmt.Sprintf("%s%s", FRONTEND_URL, redirectPage.String())
+
+	return c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 }
 
 // Refresh handles token refresh requests
@@ -216,8 +224,8 @@ func (a *AuthHandler) Refresh(c *echo.Context) error {
 		refreshExpiry = 720
 	}
 
-	accessTokenCookie := writeCookie(tokens.AccessToken, "access_token", time.Duration(accessExpiry)*time.Hour)
-	refreshTokenCookie := writeCookie(tokens.RefreshToken, "refresh_token", time.Duration(refreshExpiry)*time.Hour)
+	accessTokenCookie := writeCookie(tokens.AccessToken, "access_token", time.Duration(accessExpiry)*time.Hour, http.SameSiteNoneMode)
+	refreshTokenCookie := writeCookie(tokens.RefreshToken, "refresh_token", time.Duration(refreshExpiry)*time.Hour, http.SameSiteNoneMode)
 
 	c.SetCookie(accessTokenCookie)
 	c.SetCookie(refreshTokenCookie)
@@ -245,9 +253,9 @@ func (a *AuthHandler) Logout(c *echo.Context) error {
 	}
 
 	//nolint:gosec
-	accessTokenCookie := writeCookie("", "access_token", 0)
+	accessTokenCookie := writeCookie("", "access_token", 0, http.SameSiteNoneMode)
 	//nolint:gosec
-	refreshTokenCookie := writeCookie("", "refresh_token", 0)
+	refreshTokenCookie := writeCookie("", "refresh_token", 0, http.SameSiteNoneMode)
 	accessTokenCookie.MaxAge = -1
 	refreshTokenCookie.MaxAge = -1
 	c.SetCookie(accessTokenCookie)
