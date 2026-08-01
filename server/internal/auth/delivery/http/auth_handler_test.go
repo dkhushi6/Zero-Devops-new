@@ -60,6 +60,14 @@ func setTestConfig() {
 	viper.Set("ACCESS_TOKEN_EXPIRY", "1")
 	viper.Set("REFRESH_TOKEN_EXPIRY", "720")
 	viper.Set("FRONTEND_URL", "http://localhost:3000")
+	viper.Set("COOKIE_DOMAIN", "")
+}
+
+func setTestConfigWithCookieDomain(t *testing.T, domain string) {
+	t.Helper()
+	setTestConfig()
+	viper.Set("COOKIE_DOMAIN", domain)
+	t.Cleanup(func() { viper.Set("COOKIE_DOMAIN", "") })
 }
 
 func TestLogin_DefaultReturnTo(t *testing.T) {
@@ -216,6 +224,9 @@ func TestRefresh_Success(t *testing.T) {
 	if !accessCookie.Secure {
 		t.Error("expected access_token cookie to be Secure")
 	}
+	if accessCookie.Domain != "" {
+		t.Errorf("expected host-only access_token cookie when COOKIE_DOMAIN is unset, got Domain=%q", accessCookie.Domain)
+	}
 
 	refreshCookie := findCookie(rec.Result().Cookies(), "refresh_token")
 	if refreshCookie == nil {
@@ -226,6 +237,57 @@ func TestRefresh_Success(t *testing.T) {
 	}
 	if !refreshCookie.Secure {
 		t.Error("expected refresh_token cookie to be Secure")
+	}
+	if refreshCookie.Domain != "" {
+		t.Errorf("expected host-only refresh_token cookie when COOKIE_DOMAIN is unset, got Domain=%q", refreshCookie.Domain)
+	}
+}
+
+func TestRefresh_WithCookieDomain(t *testing.T) {
+	setTestConfigWithCookieDomain(t, ".parthgarg.me")
+
+	handler := &AuthHandler{
+		AUsecase: &mockAuthUsecase{
+			tokens: &domain.TokenResponse{
+				AccessToken:  "new-access-token",
+				RefreshToken: "new-refresh-token",
+			},
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", http.NoBody)
+	//nolint:gosec
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "test-refresh-token"})
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := handler.Refresh(c)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	accessCookie := findCookie(rec.Result().Cookies(), "access_token")
+	if accessCookie == nil {
+		t.Fatal("expected access_token cookie to be set")
+	}
+	// Go strips the leading dot when serializing Set-Cookie (cookie.go's
+	// Cookie.String), so the parsed value reflects the wire format. A non-empty
+	// Domain makes the cookie a domain cookie shared across subdomains.
+	if accessCookie.Domain != "parthgarg.me" {
+		t.Errorf("expected access_token cookie Domain=parthgarg.me, got %q", accessCookie.Domain)
+	}
+
+	refreshCookie := findCookie(rec.Result().Cookies(), "refresh_token")
+	if refreshCookie == nil {
+		t.Fatal("expected refresh_token cookie to be set")
+	}
+	if refreshCookie.Domain != "parthgarg.me" {
+		t.Errorf("expected refresh_token cookie Domain=parthgarg.me, got %q", refreshCookie.Domain)
 	}
 }
 
