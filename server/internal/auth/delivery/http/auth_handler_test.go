@@ -56,17 +56,17 @@ func (m *mockAuthUsecase) GithubOauthURL(_ context.Context, _ string) (string, e
 
 func setTestConfig() {
 	viper.Set("JWT_SECRET", "test-secret-key")
-	viper.Set("IS_PRODUCTION_ENV", false)
+	viper.Set("APP_ENV", "development")
 	viper.Set("ACCESS_TOKEN_EXPIRY", "1")
 	viper.Set("REFRESH_TOKEN_EXPIRY", "720")
 	viper.Set("FRONTEND_URL", "http://localhost:3000")
 	viper.Set("COOKIE_DOMAIN", "")
 }
 
-func setTestConfigWithCookieDomain(t *testing.T, domain string) {
+func setTestConfigWithCookieDomain(t *testing.T, cookieDomain string) {
 	t.Helper()
 	setTestConfig()
-	viper.Set("COOKIE_DOMAIN", domain)
+	viper.Set("COOKIE_DOMAIN", cookieDomain)
 	t.Cleanup(func() { viper.Set("COOKIE_DOMAIN", "") })
 }
 

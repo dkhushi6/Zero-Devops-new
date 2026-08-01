@@ -155,6 +155,7 @@ func (a *AuthHandler) LoginCallback(c *echo.Context) error {
 		return c.JSON(http.StatusForbidden, helper.BuildErrorResponse("state mismatch", err, reqID))
 	}
 
+	//nolint:gosec // clearing a cookie: intentionally no Secure/HttpOnly attributes needed
 	stateCookie := writeCookie("", "gh_oauth_state", 0, http.SameSiteLaxMode)
 	stateCookie.MaxAge = -1
 	c.SetCookie(stateCookie)
@@ -193,13 +194,13 @@ func (a *AuthHandler) LoginCallback(c *echo.Context) error {
 
 	redirectPage, err := url.Parse(payload.ReturnTo)
 
-	FRONTEND_URL := viper.GetString("FRONTEND_URL")
+	frontendURL := viper.GetString("FRONTEND_URL")
 
 	if err != nil || redirectPage.IsAbs() || redirectPage.Host != "" {
 		redirectPage, _ = url.Parse("/") // block open-redirect via return_to
 	}
 
-	redirectURL := fmt.Sprintf("%s%s", FRONTEND_URL, redirectPage.String())
+	redirectURL := fmt.Sprintf("%s%s", frontendURL, redirectPage.String())
 
 	return c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 }
