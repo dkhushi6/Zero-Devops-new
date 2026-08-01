@@ -24,6 +24,7 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
  * API requests.
  */
 export function middleware(request: NextRequest) {
+  
   const hasSessionCookie = request.cookies.has(SESSION_COOKIE_NAME);
   const { pathname } = request.nextUrl;
 

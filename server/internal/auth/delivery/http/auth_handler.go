@@ -45,7 +45,17 @@ func writeCookie(token, cookieName string, expiryTime time.Duration, sameSite ht
 		HttpOnly: true,
 		SameSite: sameSite, // added the isNone during development since the client and server are on different origins
 		Path:     "/",
+		Domain:   cookieDomain(),
 	}
+}
+
+// cookieDomain returns the Domain attribute used for cookies. When the client
+// and server live on different subdomains of the same registrable domain
+// (e.g. ghost.parthgarg.me and dev.parthgarg.me) it MUST be set to the parent
+// domain (".parthgarg.me") so the browser shares the cookies across subdomains.
+// An empty value keeps the cookies host-only, which is correct for localhost.
+func cookieDomain() string {
+	return viper.GetString("COOKIE_DOMAIN")
 }
 
 func readCookie(c *echo.Context, cookieName string) (string, error) {
