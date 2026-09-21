@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -17,7 +16,6 @@ import (
 
 	"Zero_Devops/worker_server/internal/domain"
 
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -195,7 +193,7 @@ func writeDockerfile(repoPath string, builder *Builder, pm string) error {
 
 func buildImage(ctx context.Context, repoPath, imageTag string) error {
 	//nolint:gosec // repoPath is from cloneRepo which validates the URL
-	cmd := exec.CommandContext(ctx, "docker", "build",
+	cmd := exec.CommandContext(ctx, "buildah", "bud",
 		"-t", imageTag,
 		"-f", filepath.Join(repoPath, templateDockerfile),
 		repoPath,
@@ -205,25 +203,12 @@ func buildImage(ctx context.Context, repoPath, imageTag string) error {
 	return cmd.Run()
 }
 
-func saveImageTar(ctx context.Context, cli *client.Client, imageTag, tarPath string) error {
-	saveResult, err := cli.ImageSave(ctx, []string{imageTag})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = saveResult.Close() }()
-
-	//nolint:gosec // path is constructed internally, not user input
-	file, err := os.Create(tarPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-
-	if _, err := io.Copy(file, saveResult); err != nil {
-		return err
-	}
-
-	return nil
+func saveImageTar(ctx context.Context, imageTag, tarPath string) error {
+	//nolint:gosec // imageTag/tarPath are constructed internally
+	cmd := exec.CommandContext(ctx, "buildah", "push", imageTag, "docker-archive:"+tarPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func markFailed(ctx context.Context, repo domain.DeploymentRepository, job domain.DeployJob, queueUsecase domain.QueueUsecase, errMsg string) error {
@@ -274,15 +259,15 @@ func cloneAndPrepare(repoPath string, job domain.DeployJob, logger *zap.Logger, 
 	return pm, nil
 }
 
-func buildAndSaveImage(ctx context.Context, job domain.DeployJob, cli *client.Client, repoPath, imageTag string, logger *zap.Logger) (string, error) {
-	logger.Info("building Docker image", zap.String("deployment_id", job.DeploymentID), zap.String("image_tag", imageTag))
+func buildAndSaveImage(ctx context.Context, job domain.DeployJob, repoPath, imageTag string, logger *zap.Logger) (string, error) {
+	logger.Info("building image with buildah", zap.String("deployment_id", job.DeploymentID), zap.String("image_tag", imageTag))
 	if err := buildImage(ctx, repoPath, imageTag); err != nil {
 		return "", err
 	}
 
 	tarPath := filepath.Join(repoPath, fmt.Sprintf("%s.tar", job.DeploymentID))
-	logger.Info("saving Docker image tar", zap.String("deployment_id", job.DeploymentID), zap.String("tar_path", tarPath))
-	if err := saveImageTar(ctx, cli, imageTag, tarPath); err != nil {
+	logger.Info("saving image tar", zap.String("deployment_id", job.DeploymentID), zap.String("tar_path", tarPath))
+	if err := saveImageTar(ctx, imageTag, tarPath); err != nil {
 		return "", err
 	}
 	return tarPath, nil
@@ -334,16 +319,11 @@ func ProcessDeployment(
 		return markFailed(ctx, repo, job, queueUsecase, "clone/prepare failed: "+err.Error())
 	}
 
-	cli, err := client.New(client.FromEnv)
-	if err != nil {
-		return markFailed(ctx, repo, job, queueUsecase, "docker client error: "+err.Error())
-	}
-
-	const dockerBuildTimeout = 5 * time.Minute
+	const dockerBuildTimeout = 15 * time.Minute
 	buildCtx, cancel := context.WithTimeout(context.Background(), dockerBuildTimeout)
 	defer cancel()
 
-	tarPath, err := buildAndSaveImage(buildCtx, job, cli, repoPath, imageTag, logger)
+	tarPath, err := buildAndSaveImage(buildCtx, job, repoPath, imageTag, logger)
 	if err != nil {
 		return markFailed(ctx, repo, job, queueUsecase, "build failed: "+err.Error())
 	}
