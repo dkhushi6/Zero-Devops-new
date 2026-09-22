@@ -7,15 +7,16 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
+RUN test -d ./__OUTPUT_DIR__ || (echo "build output directory '__OUTPUT_DIR__' not found after npm run build" && exit 1)
 
-FROM node:20-alpine
+FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
 RUN npm install -g serve
 
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/__OUTPUT_DIR__ ./__OUTPUT_DIR__
 
 EXPOSE 4321
 
-CMD ["serve", "dist", "-l", "4321"]
+CMD ["serve", "__OUTPUT_DIR__", "-l", "4321"]

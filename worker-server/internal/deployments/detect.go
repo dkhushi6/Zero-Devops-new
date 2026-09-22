@@ -5,15 +5,20 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 // Builder describes a detected framework with its config files, dependencies, and Docker template.
+// DefaultOutputDir is the conventional build output directory for the framework; it is only
+// set for builders whose Dockerfile template serves a static build output directly (see
+// resolveOutputDir and the __OUTPUT_DIR__ placeholder in templates/Dockerfile.*.tmpl).
 type Builder struct {
-	Name        string
-	ConfigFiles []string
-	Deps        []string
-	Template    string
+	Name             string
+	ConfigFiles      []string
+	Deps             []string
+	Template         string
+	DefaultOutputDir string
 }
 
 // Named builder variables allow detectFramework to reference specific builders
@@ -57,16 +62,18 @@ var (
 		Template:    "Dockerfile.gatsby.tmpl",
 	}
 	astroBuilder = &Builder{
-		Name:        frameworkAstro,
-		ConfigFiles: []string{"astro.config.ts", "astro.config.js", "astro.config.mjs"},
-		Deps:        []string{frameworkAstro},
-		Template:    "Dockerfile.astro.tmpl",
+		Name:             frameworkAstro,
+		ConfigFiles:      []string{"astro.config.ts", "astro.config.js", "astro.config.mjs"},
+		Deps:             []string{frameworkAstro},
+		Template:         "Dockerfile.astro.tmpl",
+		DefaultOutputDir: "dist",
 	}
 	viteBuilder = &Builder{
-		Name:        frameworkVite,
-		ConfigFiles: []string{"vite.config.ts", "vite.config.js", "vite.config.mjs"},
-		Deps:        []string{frameworkVite},
-		Template:    "Dockerfile.vite.tmpl",
+		Name:             frameworkVite,
+		ConfigFiles:      []string{"vite.config.ts", "vite.config.js", "vite.config.mjs"},
+		Deps:             []string{frameworkVite},
+		Template:         "Dockerfile.vite.tmpl",
+		DefaultOutputDir: "dist",
 	}
 
 	// JS/TS — dep-only detection (no unique config file)
@@ -86,9 +93,10 @@ var (
 		Template: "Dockerfile.solid.tmpl",
 	}
 	reactBuilder = &Builder{
-		Name:     frameworkReact,
-		Deps:     []string{frameworkReact, "react-dom"},
-		Template: "Dockerfile.react.tmpl",
+		Name:             frameworkReact,
+		Deps:             []string{frameworkReact, "react-dom"},
+		Template:         "Dockerfile.react.tmpl",
+		DefaultOutputDir: "build",
 	}
 
 	// nodeBuilder is the generic JS fallback — not in the builders slice because it has
@@ -361,4 +369,79 @@ func detectPackageManager(repoPath string) string {
 		}
 	}
 	return pkgManagerNPM
+}
+
+// outDirConfigPattern matches a JS/TS config object's outDir field, e.g. `outDir: "output"`.
+// This is a best-effort string scan, not a JS parser — it catches the common static-literal
+// case (vite.config.ts / astro.config.ts) without needing to execute the config file.
+var outDirConfigPattern = regexp.MustCompile(`outDir\s*:\s*['"]([^'"]+)['"]`)
+
+// buildPathEnvPattern matches Create React App's BUILD_PATH override, e.g. `BUILD_PATH=out`.
+var buildPathEnvPattern = regexp.MustCompile(`(?m)^\s*BUILD_PATH\s*=\s*(.+?)\s*$`)
+
+// readConfigOutDir scans builder.ConfigFiles in order and returns the first outDir override
+// found. Only the config file that actually exists on disk is read.
+func readConfigOutDir(repoPath string, builder *Builder) string {
+	for _, cfgName := range builder.ConfigFiles {
+		//nolint:gosec // cfgName comes from the builder's own fixed ConfigFiles list, not user input
+		data, err := os.ReadFile(filepath.Join(repoPath, cfgName))
+		if err != nil {
+			continue
+		}
+		if m := outDirConfigPattern.FindSubmatch(data); m != nil {
+			return string(m[1])
+		}
+	}
+	return ""
+}
+
+// readBuildPathEnv scans CRA's supported env files, in the precedence order CRA itself uses,
+// for a BUILD_PATH override.
+func readBuildPathEnv(repoPath string) string {
+	for _, envFile := range []string{".env.production.local", ".env.local", ".env.production", ".env"} {
+		//nolint:gosec // envFile is a fixed candidate name, not user input
+		data, err := os.ReadFile(filepath.Join(repoPath, envFile))
+		if err != nil {
+			continue
+		}
+		if m := buildPathEnvPattern.FindSubmatch(data); m != nil {
+			return string(m[1])
+		}
+	}
+	return ""
+}
+
+// sanitizeOutputDir rejects overrides that would escape the repo root (absolute paths, `..`
+// traversal) or resolve to the repo root itself, returning "" for anything unsafe.
+func sanitizeOutputDir(dir string) string {
+	dir = strings.TrimSpace(dir)
+	dir = strings.TrimPrefix(dir, "./")
+	dir = filepath.Clean(dir)
+	if dir == "." || dir == "" || filepath.IsAbs(dir) || strings.HasPrefix(dir, "..") {
+		return ""
+	}
+	return dir
+}
+
+// resolveOutputDir determines the build output directory for a static builder: it checks for
+// a framework-specific override (custom outDir in vite/astro config, CRA's BUILD_PATH env var)
+// before falling back to the framework's conventional default. Returns "" for builders that
+// don't have a DefaultOutputDir (i.e. non-static builders, where this doesn't apply).
+func resolveOutputDir(repoPath string, builder *Builder) string {
+	if builder.DefaultOutputDir == "" {
+		return ""
+	}
+
+	var override string
+	switch builder.Name {
+	case frameworkReact:
+		override = readBuildPathEnv(repoPath)
+	case frameworkVite, frameworkAstro:
+		override = readConfigOutDir(repoPath, builder)
+	}
+
+	if clean := sanitizeOutputDir(override); clean != "" {
+		return clean
+	}
+	return builder.DefaultOutputDir
 }

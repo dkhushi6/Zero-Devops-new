@@ -53,6 +53,10 @@ const (
 	langDotNet     = "dotnet"
 
 	gitChangeDirFlag = "-C"
+
+	// outputDirPlaceholder is substituted in static templates (Dockerfile.react/vite/astro.tmpl)
+	// with the resolved build output directory name (see resolveOutputDir in detect.go).
+	outputDirPlaceholder = "__OUTPUT_DIR__"
 )
 
 var pmInstallCommands = map[string]string{
@@ -179,12 +183,23 @@ func writeDockerfile(repoPath string, builder *Builder, pm string) error {
 	installCmd := pmInstallCommands[pm]
 	if installCmd != "" && pm != pkgManagerNPM {
 		if pm == pkgManagerBun {
-			content = strings.ReplaceAll(content, "FROM node:20-alpine", "FROM oven/bun:1-alpine")
+			// Swap the builder stage, and any runtime stage that still installs the
+			// project's own dependencies (bare "FROM node:20-alpine" with no stage
+			// name). Templates whose runtime stage is static-file-serving only (named
+			// "AS runtime") never run the project's package manager there — they only
+			// need npm (bundled in every node:* image) to install `serve` — so that
+			// stage must stay on node regardless of which pm built the project.
+			content = strings.ReplaceAll(content, "FROM node:20-alpine AS builder", "FROM oven/bun:1-alpine AS builder")
+			content = strings.ReplaceAll(content, "FROM node:20-alpine\n", "FROM oven/bun:1-alpine\n")
 			content = strings.ReplaceAll(content, "--omit=dev", "--production")
 		}
 		content = strings.ReplaceAll(content, "npm ci --ignore-scripts", installCmd)
 		content = strings.ReplaceAll(content, "npm run", pm+" run")
 		content = strings.ReplaceAll(content, `"npm`, `"`+pm)
+	}
+
+	if outDir := resolveOutputDir(repoPath, builder); outDir != "" {
+		content = strings.ReplaceAll(content, outputDirPlaceholder, outDir)
 	}
 
 	//nolint:gosec // repoPath is from cloneRepo which returns a controlled path
