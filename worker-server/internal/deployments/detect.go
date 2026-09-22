@@ -3,6 +3,7 @@ package deployments
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,76 +27,92 @@ type Builder struct {
 var (
 	// JS/TS — frameworks with unique config files
 	angularBuilder = &Builder{
-		Name:        frameworkAngular,
-		ConfigFiles: []string{"angular.json"},
-		Deps:        []string{"@angular/core"},
-		Template:    "Dockerfile.angular.tmpl",
+		Name:             frameworkAngular,
+		ConfigFiles:      []string{"angular.json"},
+		Deps:             []string{"@angular/core"},
+		Template:         "static/Dockerfile.angular.tmpl",
+		DefaultOutputDir: outputDirDist,
 	}
 	nextjsBuilder = &Builder{
 		Name:        frameworkNextJS,
 		ConfigFiles: []string{"next.config.ts", "next.config.js", "next.config.mjs", "next.config.tsx", "next.config.jsx"},
 		Deps:        []string{"next"},
-		Template:    "Dockerfile.nextjs.tmpl",
+		Template:    "dynamic/Dockerfile.nextjs.tmpl",
 	}
 	nuxtBuilder = &Builder{
 		Name:        frameworkNuxt,
 		ConfigFiles: []string{"nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs"},
 		Deps:        []string{"nuxt"},
-		Template:    "Dockerfile.nuxt.tmpl",
+		Template:    "dynamic/Dockerfile.nuxt.tmpl",
 	}
 	sveltekitBuilder = &Builder{
 		Name:        frameworkSvelteKit,
 		ConfigFiles: []string{"svelte.config.ts", "svelte.config.js", "svelte.config.cjs"},
 		Deps:        []string{"@sveltejs/kit"},
-		Template:    "Dockerfile.sveltekit.tmpl",
+		Template:    "dynamic/Dockerfile.sveltekit.tmpl",
 	}
 	remixBuilder = &Builder{
 		Name:        frameworkRemix,
 		ConfigFiles: []string{"remix.config.js", "remix.config.ts", "remix.vite.config.ts", "remix.vite.config.js"},
 		Deps:        []string{"@remix-run/node", "@remix-run/react"},
-		Template:    "Dockerfile.remix.tmpl",
+		Template:    "dynamic/Dockerfile.remix.tmpl",
 	}
 	gatsbyBuilder = &Builder{
-		Name:        frameworkGatsby,
-		ConfigFiles: []string{"gatsby-config.ts", "gatsby-config.js", "gatsby-config.mjs"},
-		Deps:        []string{"gatsby"},
-		Template:    "Dockerfile.gatsby.tmpl",
+		Name:             frameworkGatsby,
+		ConfigFiles:      []string{"gatsby-config.ts", "gatsby-config.js", "gatsby-config.mjs"},
+		Deps:             []string{"gatsby"},
+		Template:         "static/Dockerfile.gatsby.tmpl",
+		DefaultOutputDir: "public",
 	}
 	astroBuilder = &Builder{
 		Name:             frameworkAstro,
 		ConfigFiles:      []string{"astro.config.ts", "astro.config.js", "astro.config.mjs"},
 		Deps:             []string{frameworkAstro},
-		Template:         "Dockerfile.astro.tmpl",
-		DefaultOutputDir: "dist",
+		Template:         "static/Dockerfile.astro.tmpl",
+		DefaultOutputDir: outputDirDist,
 	}
 	viteBuilder = &Builder{
 		Name:             frameworkVite,
 		ConfigFiles:      []string{"vite.config.ts", "vite.config.js", "vite.config.mjs"},
 		Deps:             []string{frameworkVite},
-		Template:         "Dockerfile.vite.tmpl",
-		DefaultOutputDir: "dist",
+		Template:         "static/Dockerfile.vite.tmpl",
+		DefaultOutputDir: outputDirDist,
+	}
+	// tanstackStartBuilder handles TanStack Start — a vite.config.ts-based SSR
+	// meta-framework that would otherwise be misdetected as plain static Vite
+	// (see viteSSRRecipes / checkSSRMetaFramework). Unlike most Vite SSR
+	// frameworks on the refusal list, it builds on Nitro, which respects a
+	// NITRO_PRESET env var override at build time — the template forces
+	// node-server output regardless of the repo's own committed default
+	// (often Cloudflare Workers, which isn't a runnable container at all).
+	tanstackStartBuilder = &Builder{
+		Name:     frameworkTanStack,
+		Template: "dynamic/Dockerfile.tanstack-start.tmpl",
 	}
 
 	// JS/TS — dep-only detection (no unique config file)
 	svelteBuilder = &Builder{
-		Name:     frameworkSvelte,
-		Deps:     []string{"svelte"},
-		Template: "Dockerfile.svelte.tmpl",
+		Name:             frameworkSvelte,
+		Deps:             []string{"svelte"},
+		Template:         "static/Dockerfile.svelte.tmpl",
+		DefaultOutputDir: outputDirDist,
 	}
 	vueBuilder = &Builder{
-		Name:     frameworkVue,
-		Deps:     []string{"vue"},
-		Template: "Dockerfile.vue.tmpl",
+		Name:             frameworkVue,
+		Deps:             []string{"vue"},
+		Template:         "static/Dockerfile.vue.tmpl",
+		DefaultOutputDir: outputDirDist,
 	}
 	solidBuilder = &Builder{
-		Name:     frameworkSolid,
-		Deps:     []string{"solid-js"},
-		Template: "Dockerfile.solid.tmpl",
+		Name:             frameworkSolid,
+		Deps:             []string{"solid-js"},
+		Template:         "static/Dockerfile.solid.tmpl",
+		DefaultOutputDir: outputDirDist,
 	}
 	reactBuilder = &Builder{
 		Name:             frameworkReact,
 		Deps:             []string{frameworkReact, "react-dom"},
-		Template:         "Dockerfile.react.tmpl",
+		Template:         "static/Dockerfile.react.tmpl",
 		DefaultOutputDir: "build",
 	}
 
@@ -103,55 +120,55 @@ var (
 	// no config files and no deps; detectFramework returns it explicitly.
 	nodeBuilder = &Builder{
 		Name:     langNode,
-		Template: "Dockerfile.node.tmpl",
+		Template: "dynamic/Dockerfile.node.tmpl",
 	}
 
 	// Compiled / interpreted languages
 	goBuilder = &Builder{
 		Name:        langGo,
 		ConfigFiles: []string{"go.mod"},
-		Template:    "Dockerfile.go.tmpl",
+		Template:    "dynamic/Dockerfile.go.tmpl",
 	}
 	rustBuilder = &Builder{
 		Name:        langRust,
 		ConfigFiles: []string{"Cargo.toml"},
-		Template:    "Dockerfile.rust.tmpl",
+		Template:    "dynamic/Dockerfile.rust.tmpl",
 	}
 	dotnetBuilder = &Builder{
 		Name:        langDotNet,
 		ConfigFiles: []string{"global.json", "Directory.Build.props"},
-		Template:    "Dockerfile.dotnet.tmpl",
+		Template:    "dynamic/Dockerfile.dotnet.tmpl",
 	}
 	javaMavenBuilder = &Builder{
 		Name:        langJavaMaven,
 		ConfigFiles: []string{"pom.xml"},
-		Template:    "Dockerfile.java.tmpl",
+		Template:    "dynamic/Dockerfile.java.tmpl",
 	}
 	javaGradleBuilder = &Builder{
 		Name:        langJavaGradle,
 		ConfigFiles: []string{"build.gradle", "build.gradle.kts"},
-		Template:    "Dockerfile.java.tmpl",
+		Template:    "dynamic/Dockerfile.java.tmpl",
 	}
 	rubyBuilder = &Builder{
 		Name:        langRuby,
 		ConfigFiles: []string{"Gemfile"},
-		Template:    "Dockerfile.ruby.tmpl",
+		Template:    "dynamic/Dockerfile.ruby.tmpl",
 	}
 	phpBuilder = &Builder{
 		Name:        langPHP,
 		ConfigFiles: []string{"composer.json"},
-		Template:    "Dockerfile.php.tmpl",
+		Template:    "dynamic/Dockerfile.php.tmpl",
 	}
 	elixirBuilder = &Builder{
 		Name:        langElixir,
 		ConfigFiles: []string{"mix.exs"},
-		Template:    "Dockerfile.elixir.tmpl",
+		Template:    "dynamic/Dockerfile.elixir.tmpl",
 	}
 	// pythonBuilder is referenced by detectFramework for the Phase 3 deep-walk fallback.
 	pythonBuilder = &Builder{
 		Name:        langPython,
 		ConfigFiles: []string{"requirements.txt", "pyproject.toml", "Pipfile"},
-		Template:    "Dockerfile.python.tmpl",
+		Template:    "dynamic/Dockerfile.python.tmpl",
 	}
 )
 
@@ -195,7 +212,7 @@ var builders = []*Builder{
 var ignoredDirs = map[string]bool{
 	"node_modules": true,
 	".git":         true,
-	"dist":         true,
+	outputDirDist:  true,
 	"build":        true,
 	".next":        true,
 	".cache":       true,
@@ -219,6 +236,41 @@ var packageManagers = []struct {
 type packageJSON struct {
 	Dependencies    map[string]string `json:"dependencies"`
 	DevDependencies map[string]string `json:"devDependencies"`
+	Scripts         map[string]string `json:"scripts"`
+}
+
+// viteSSRRecipes maps a dependency name to a builder with an actual working
+// deployment recipe, checked before viteSSRMetaFrameworkDeps so these bypass the
+// refusal below. TanStack Start builds on Nitro (same as Nuxt), which respects a
+// NITRO_PRESET env var override at build time — see tanstackStartBuilder.
+var viteSSRRecipes = map[string]*Builder{
+	"@tanstack/react-start": tanstackStartBuilder,
+	"@tanstack/start":       tanstackStartBuilder,
+	"@tanstack/solid-start": tanstackStartBuilder,
+}
+
+// viteSSRMetaFrameworkDeps maps a dependency name to the framework it indicates —
+// present alongside vite.config.* means this isn't plain static Vite, but unlike
+// viteSSRRecipes there's no recipe yet, so detection refuses rather than guesses.
+// Inherently incomplete (private forks, hand-rolled SSR setups won't appear here);
+// resolveOutputDir's index.html check is the real ground truth for everything else.
+var viteSSRMetaFrameworkDeps = map[string]string{
+	"vike":                  "vike",
+	"vite-plugin-ssr":       "vike (vite-plugin-ssr)",
+	"@builder.io/qwik-city": "Qwik City",
+	"waku":                  "Waku",
+}
+
+// astroSSRAdapterDeps indicates Astro is configured for output: 'server' or 'hybrid'.
+// An SSR adapter package is only ever installed when Astro needs to run a server —
+// never for static output — so its presence is a reliable signal regardless of what
+// astro.config.* actually says (which would need a real JS evaluator to parse safely).
+var astroSSRAdapterDeps = map[string]string{
+	"@astrojs/node":       "Astro (Node adapter)",
+	"@astrojs/vercel":     "Astro (Vercel adapter)",
+	"@astrojs/cloudflare": "Astro (Cloudflare adapter)",
+	"@astrojs/netlify":    "Astro (Netlify adapter)",
+	"@astrojs/deno":       "Astro (Deno adapter)",
 }
 
 // buildRootFileSet reads the top-level directory entries of repoPath once and returns
@@ -263,6 +315,56 @@ func hasDep(pkg *packageJSON, dep string) bool {
 		return true
 	}
 	return false
+}
+
+// matchSSRMetaFrameworkDep returns the display name of the first marker dep present in
+// pkg, or "" if none match.
+func matchSSRMetaFrameworkDep(pkg *packageJSON, markers map[string]string) string {
+	for dep, name := range markers {
+		if hasDep(pkg, dep) {
+			return name
+		}
+	}
+	return ""
+}
+
+// checkSSRMetaFramework runs the Layer 1 dependency check for a vite/astro config
+// match that could be a disguised SSR meta-framework. Returns (recipeBuilder, "")
+// when a known framework WITH a recipe is detected (use recipeBuilder instead of
+// b); (nil, name) when a known framework WITHOUT a recipe is detected (refuse);
+// (nil, "") otherwise — b is a plain static build.
+func checkSSRMetaFramework(repoPath string, b *Builder) (recipeBuilder *Builder, refusalName string) {
+	var refusalMarkers map[string]string
+	switch b.Name {
+	case frameworkVite:
+		refusalMarkers = viteSSRMetaFrameworkDeps
+	case frameworkAstro:
+		refusalMarkers = astroSSRAdapterDeps
+	default:
+		return nil, ""
+	}
+
+	pkg, err := readPackageJSON(repoPath)
+	if err != nil || pkg == nil {
+		return nil, ""
+	}
+
+	if b.Name == frameworkVite {
+		for dep, recipeBuilder := range viteSSRRecipes {
+			if hasDep(pkg, dep) {
+				return recipeBuilder, ""
+			}
+		}
+	}
+
+	return nil, matchSSRMetaFrameworkDep(pkg, refusalMarkers)
+}
+
+// hasStartScript reports whether package.json declares a non-empty "start" script —
+// real proof a server entrypoint exists, not a guess. Used to decide whether an
+// SSR-mismatch build failure is worth retrying through the generic dynamic path.
+func hasStartScript(pkg *packageJSON) bool {
+	return strings.TrimSpace(pkg.Scripts["start"]) != ""
 }
 
 // hasConfigFile reports whether configFile exists under repoPath and is a regular file.
@@ -313,9 +415,18 @@ func detectFramework(repoPath string) (*Builder, error) {
 
 	for _, b := range builders {
 		for _, cfg := range b.ConfigFiles {
-			if rootFiles[strings.ToLower(cfg)] {
-				return b, nil
+			if !rootFiles[strings.ToLower(cfg)] {
+				continue
 			}
+			if recipeBuilder, refusalName := checkSSRMetaFramework(repoPath, b); recipeBuilder != nil {
+				return recipeBuilder, nil
+			} else if refusalName != "" {
+				return nil, fmt.Errorf(
+					"detected %s via %s dependencies — no static or dynamic deployment recipe exists yet for this framework; set deployment_type manually in project settings",
+					refusalName, b.Name,
+				)
+			}
+			return b, nil
 		}
 	}
 

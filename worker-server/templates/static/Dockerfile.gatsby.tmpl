@@ -7,7 +7,7 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
-RUN test -d ./__OUTPUT_DIR__ || (echo "build output directory '__OUTPUT_DIR__' not found after npm run build" && exit 1)
+RUN test -f ./__OUTPUT_DIR__/index.html || (echo "ZERODEVOPS_SSR_MISMATCH: no index.html in __OUTPUT_DIR__ after npm run build" && exit 1)
 
 FROM node:20-alpine AS runtime
 
@@ -17,6 +17,6 @@ RUN npm install -g serve
 
 COPY --from=builder /app/__OUTPUT_DIR__ ./__OUTPUT_DIR__
 
-EXPOSE 3000
+EXPOSE 9000
 
-CMD ["serve", "-s", "__OUTPUT_DIR__", "-l", "3000"]
+CMD ["serve", "__OUTPUT_DIR__", "-l", "9000"]
